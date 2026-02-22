@@ -2,8 +2,8 @@ name: Generate Daily Puzzle
 
 on:
   schedule:
-    # Run at midnight UTC every day
-    - cron: '0 0 * * *'
+    # Run at midnight Singapore time (SGT = UTC+8, so 4pm UTC)
+    - cron: '0 16 * * *'
   workflow_dispatch:
 
 jobs:
