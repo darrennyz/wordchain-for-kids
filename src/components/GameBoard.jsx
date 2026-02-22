@@ -1,0 +1,419 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { getTodaysPuzzle, generatePuzzleViaEdge, saveResult } from '../lib/supabase';
+
+// Tile color palette for word tiles
+const TILE_COLORS = [
+  { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', accent: '#3b82f6' },
+  { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', accent: '#8b5cf6' },
+  { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700', accent: '#22c55e' },
+  { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', accent: '#f97316' },
+  { bg: 'bg-pink-50', border: 'border-pink-200', text: 'text-pink-700', accent: '#ec4899' },
+  { bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-700', accent: '#eab308' },
+  { bg: 'bg-teal-50', border: 'border-teal-200', text: 'text-teal-700', accent: '#14b8a6' },
+];
+
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLogout, onHistory }) {
+  const [loading, setLoading] = useState(!puzzle);
+  const [error, setError] = useState('');
+  const [chain, setChain] = useState([]);            // words placed in chain slots
+  const [availableWords, setAvailableWords] = useState([]);  // words in the word bank
+  const [timer, setTimer] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [wrongPair, setWrongPair] = useState(null);   // index of wrong link for shake animation
+  const [draggedWord, setDraggedWord] = useState(null);
+  const [dragOverSlot, setDragOverSlot] = useState(null);
+  const timerRef = useRef(null);
+  const startedRef = useRef(false);
+
+  // Load puzzle
+  useEffect(() => {
+    if (!puzzle) {
+      loadPuzzle();
+    } else {
+      initGame(puzzle);
+    }
+  }, []);
+
+  async function loadPuzzle() {
+    setLoading(true);
+    try {
+      let p = await getTodaysPuzzle();
+      if (!p) {
+        // No puzzle for today, try generating via Edge Function
+        p = await generatePuzzleViaEdge();
+      }
+      setPuzzle(p);
+      initGame(p);
+    } catch (err) {
+      console.error('Failed to load puzzle:', err);
+      setError('Could not load today\'s puzzle. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function initGame(p) {
+    const words = typeof p.words === 'string' ? JSON.parse(p.words) : p.words;
+    setAvailableWords(shuffleArray(words));
+    setChain(new Array(words.length).fill(null));
+    setTimer(0);
+    setIsRunning(false);
+    setCompleted(false);
+    startedRef.current = false;
+  }
+
+  // Timer
+  useEffect(() => {
+    if (isRunning && !completed) {
+      timerRef.current = setInterval(() => setTimer((t) => t + 1), 1000);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [isRunning, completed]);
+
+  // Start timer on first interaction
+  function ensureStarted() {
+    if (!startedRef.current) {
+      startedRef.current = true;
+      setIsRunning(true);
+    }
+  }
+
+  // Place a word into the next available chain slot
+  function placeWord(word) {
+    ensureStarted();
+    const nextSlot = chain.indexOf(null);
+    if (nextSlot === -1) return;
+
+    setChain((prev) => {
+      const next = [...prev];
+      next[nextSlot] = word;
+      return next;
+    });
+    setAvailableWords((prev) => prev.filter((w) => w !== word));
+  }
+
+  // Remove a word from the chain back to the bank
+  function removeWord(slotIndex) {
+    if (completed) return;
+    const word = chain[slotIndex];
+    if (!word) return;
+
+    // Remove from this slot and shift remaining words down
+    setChain((prev) => {
+      const next = [...prev];
+      // Remove the word at slotIndex and shift everything after it
+      for (let i = slotIndex; i < next.length - 1; i++) {
+        next[i] = next[i + 1];
+      }
+      next[next.length - 1] = null;
+      return next;
+    });
+    setAvailableWords((prev) => [...prev, word]);
+  }
+
+  // Drag and drop handlers
+  function handleDragStart(word) {
+    setDraggedWord(word);
+  }
+
+  function handleDragOver(e, slotIndex) {
+    e.preventDefault();
+    setDragOverSlot(slotIndex);
+  }
+
+  function handleDragLeave() {
+    setDragOverSlot(null);
+  }
+
+  function handleDrop(e, slotIndex) {
+    e.preventDefault();
+    setDragOverSlot(null);
+    if (draggedWord) {
+      ensureStarted();
+      // Place at the specific slot
+      if (chain[slotIndex] === null) {
+        setChain((prev) => {
+          const next = [...prev];
+          next[slotIndex] = draggedWord;
+          return next;
+        });
+        setAvailableWords((prev) => prev.filter((w) => w !== draggedWord));
+      }
+      setDraggedWord(null);
+    }
+  }
+
+  // Check the chain
+  async function checkChain() {
+    if (!puzzle) return;
+    const solution = typeof puzzle.solution === 'string' ? JSON.parse(puzzle.solution) : puzzle.solution;
+
+    // Check if all slots are filled
+    if (chain.some((w) => w === null)) return;
+
+    // Compare with solution
+    const isCorrect = chain.every((w, i) => w.toUpperCase() === solution[i].toUpperCase());
+
+    if (isCorrect) {
+      setCompleted(true);
+      setIsRunning(false);
+      clearInterval(timerRef.current);
+
+      // Save result
+      try {
+        const result = await saveResult(profile.id, puzzle.id, timer);
+        onComplete({ ...result, time_seconds: timer });
+      } catch (err) {
+        console.error('Failed to save result:', err);
+        onComplete({ time_seconds: timer });
+      }
+    } else {
+      // Find first wrong pair and shake
+      for (let i = 0; i < chain.length - 1; i++) {
+        const pair = `${chain[i]} ${chain[i + 1]}`.toLowerCase();
+        const solPair = `${solution[i]} ${solution[i + 1]}`.toLowerCase();
+        if (pair !== solPair) {
+          setWrongPair(i);
+          setTimeout(() => setWrongPair(null), 600);
+          break;
+        }
+      }
+    }
+  }
+
+  // Clear chain
+  function clearChain() {
+    if (completed) return;
+    const wordsInChain = chain.filter(Boolean);
+    setAvailableWords((prev) => [...prev, ...wordsInChain]);
+    setChain(new Array(chain.length).fill(null));
+  }
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-4">
+        <div className="w-10 h-10 border-3 border-snow-200 border-t-accent-blue rounded-full animate-spin" />
+        <p className="text-snow-500 font-medium text-sm">Loading today's puzzle...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6">
+        <div className="text-4xl">😕</div>
+        <p className="text-snow-600 text-center">{error}</p>
+        <button
+          onClick={loadPuzzle}
+          className="px-6 py-2.5 bg-accent-blue text-white font-display font-semibold rounded-xl"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
+  const filledCount = chain.filter(Boolean).length;
+  const totalSlots = chain.length;
+  const allFilled = filledCount === totalSlots;
+
+  return (
+    <div className="flex-1 flex flex-col px-4 py-4 animate-fade-in overflow-hidden">
+      {/* Top bar */}
+      <div className="flex items-center justify-between mb-3">
+        <button
+          onClick={onLogout}
+          className="flex items-center gap-1.5 text-snow-500 hover:text-snow-700 transition-colors"
+        >
+          <span className="text-lg">{profile.avatar_emoji}</span>
+          <span className="text-xs font-medium text-snow-500">{profile.name}</span>
+        </button>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onHistory}
+            className="text-snow-400 hover:text-snow-600 transition-colors"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Puzzle info */}
+      <div className="text-center mb-4">
+        <h1 className="font-display text-lg font-bold text-snow-800">
+          Daily WordChain
+        </h1>
+        {puzzle && (
+          <p className="text-snow-400 text-xs font-medium">
+            Puzzle #{puzzle.puzzle_number} &middot; {new Date(puzzle.puzzle_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </p>
+        )}
+      </div>
+
+      {/* Timer */}
+      <div className="flex justify-center mb-4">
+        <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full ${
+          timer > 120 ? 'bg-red-50 timer-warning' : 'bg-snow-100 text-snow-600'
+        }`}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          <span className="font-display font-bold text-lg tabular-nums">
+            {formatTime(timer)}
+          </span>
+        </div>
+      </div>
+
+      {/* Chain area */}
+      <div className="flex-1 flex flex-col gap-1.5 mb-3 overflow-y-auto">
+        <p className="text-xs text-snow-400 font-medium text-center mb-1">
+          Build your word chain ({filledCount}/{totalSlots})
+        </p>
+
+        {chain.map((word, i) => (
+          <div key={i}>
+            {/* Chain slot */}
+            <div
+              onDragOver={(e) => !word && handleDragOver(e, i)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, i)}
+              onClick={() => word && removeWord(i)}
+              className={`drop-zone flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition-all duration-200 ${
+                word
+                  ? `bg-white border-snow-200 shadow-tile cursor-pointer hover:shadow-tile-active ${
+                      wrongPair === i || wrongPair === i - 1 ? 'animate-shake border-accent-red' : ''
+                    }`
+                  : `border-dashed border-snow-200 bg-snow-50/50 ${
+                      dragOverSlot === i ? 'drag-over' : ''
+                    }`
+              }`}
+            >
+              {/* Position number */}
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                word
+                  ? `${TILE_COLORS[i % TILE_COLORS.length].bg} ${TILE_COLORS[i % TILE_COLORS.length].text}`
+                  : 'bg-snow-100 text-snow-400'
+              }`}>
+                {i + 1}
+              </div>
+
+              {/* Word or placeholder */}
+              {word ? (
+                <span className={`font-display font-bold text-base ${TILE_COLORS[i % TILE_COLORS.length].text}`}>
+                  {word.toUpperCase()}
+                </span>
+              ) : (
+                <span className="text-snow-300 text-sm">
+                  Drag or tap a word here
+                </span>
+              )}
+
+              {/* Remove hint */}
+              {word && !completed && (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  className="ml-auto text-snow-300 flex-shrink-0"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              )}
+            </div>
+
+            {/* Chain connector */}
+            {i < chain.length - 1 && word && chain[i + 1] && (
+              <div className="flex justify-center py-0.5">
+                <div
+                  className="w-0.5 h-3 rounded-full"
+                  style={{
+                    background: `linear-gradient(to bottom, ${TILE_COLORS[i % TILE_COLORS.length].accent}, ${TILE_COLORS[(i + 1) % TILE_COLORS.length].accent})`,
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Word bank */}
+      {availableWords.length > 0 && (
+        <div className="mb-3">
+          <p className="text-xs text-snow-400 font-medium text-center mb-2">
+            Available words
+          </p>
+          <div className="flex flex-wrap gap-2 justify-center">
+            {availableWords.map((word, i) => (
+              <button
+                key={`${word}-${i}`}
+                draggable
+                onDragStart={() => handleDragStart(word)}
+                onClick={() => placeWord(word)}
+                className="word-tile px-4 py-2 bg-white rounded-xl border-2 border-snow-200 shadow-tile hover:shadow-tile-active active:scale-95 transition-all duration-150"
+              >
+                <span className="font-display font-bold text-sm text-snow-700">
+                  {word.toUpperCase()}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex gap-2">
+        {!allFilled && (
+          <button
+            onClick={clearChain}
+            disabled={filledCount === 0}
+            className="flex-1 py-3 bg-snow-100 text-snow-600 font-display font-semibold text-sm rounded-xl hover:bg-snow-200 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Clear All
+          </button>
+        )}
+        {allFilled && (
+          <>
+            <button
+              onClick={clearChain}
+              className="flex-1 py-3 bg-snow-100 text-snow-600 font-display font-semibold text-sm rounded-xl hover:bg-snow-200 active:scale-[0.98] transition-all"
+            >
+              Reset
+            </button>
+            <button
+              onClick={checkChain}
+              className="flex-[2] py-3 bg-accent-green text-white font-display font-bold text-base rounded-xl shadow-md hover:bg-green-600 active:scale-[0.98] transition-all animate-pulse-slow"
+            >
+              Check Chain!
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
