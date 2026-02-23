@@ -7,24 +7,23 @@ export default function SplashScreen() {
       <div className="animate-bounce-in">
         <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center shadow-lg">
           <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            {/* Brain/lightbulb shape */}
             <path
-              d="M12 20C12 17.79 13.79 16 16 16H24C26.21 16 28 17.79 28 20V24C28 26.21 26.21 28 24 28H16C13.79 28 12 26.21 12 24V20Z"
+              d="M28 10C20.27 10 14 16.27 14 24C14 28.4 16.1 32.3 19.3 34.8C19.7 35.1 20 35.6 20 36.1V38C20 39.1 20.9 40 22 40H34C35.1 40 36 39.1 36 38V36.1C36 35.6 36.3 35.1 36.7 34.8C39.9 32.3 42 28.4 42 24C42 16.27 35.73 10 28 10Z"
               fill="white"
-              opacity="0.9"
+              opacity="0.85"
             />
-            <path
-              d="M28 28C28 25.79 29.79 24 32 24H40C42.21 24 44 25.79 44 28V32C44 34.21 42.21 36 40 36H32C29.79 36 28 34.21 28 32V28Z"
-              fill="white"
-              opacity="0.7"
-            />
-            <path
-              d="M20 36C20 33.79 21.79 32 24 32H32C34.21 32 36 33.79 36 36V40C36 42.21 34.21 44 32 44H24C21.79 44 20 42.21 20 40V36Z"
-              fill="white"
-              opacity="0.5"
-            />
-            {/* Chain links */}
-            <circle cx="28" cy="26" r="3" fill="white" />
-            <circle cx="28" cy="32" r="3" fill="white" />
+            {/* Lightbulb base */}
+            <rect x="22" y="42" width="12" height="2" rx="1" fill="white" opacity="0.6" />
+            <rect x="24" y="46" width="8" height="2" rx="1" fill="white" opacity="0.4" />
+            {/* Sparkle dots */}
+            <circle cx="18" cy="14" r="1.5" fill="white" opacity="0.5" />
+            <circle cx="38" cy="14" r="1.5" fill="white" opacity="0.5" />
+            <circle cx="10" cy="24" r="1.5" fill="white" opacity="0.4" />
+            <circle cx="46" cy="24" r="1.5" fill="white" opacity="0.4" />
+            {/* Gear/puzzle accent inside bulb */}
+            <circle cx="28" cy="24" r="5" fill="none" stroke="white" strokeWidth="1.5" opacity="0.5" />
+            <circle cx="28" cy="24" r="2" fill="white" opacity="0.6" />
           </svg>
         </div>
       </div>
@@ -32,10 +31,10 @@ export default function SplashScreen() {
       {/* Title */}
       <div className="text-center" style={{ animationDelay: '0.2s' }}>
         <h1 className="font-display text-4xl font-bold text-snow-800 tracking-tight">
-          WordChain
+          ThinkIn Kids
         </h1>
         <p className="mt-2 text-snow-500 font-medium text-sm">
-          Link words together!
+          Daily Brain Teaser for Kids
         </p>
       </div>
 
