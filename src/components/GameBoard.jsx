@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getTodaysPuzzle, generatePuzzleViaEdge, saveResult } from '../lib/supabase';
+import React, { useState, useEffect, useRef } from 'react';
+import { getTodaysPuzzle, generatePuzzleViaEdge, saveResult, hasCompletedToday } from '../lib/supabase';
 
 // Tile color palette for word tiles
 const TILE_COLORS = [
@@ -27,39 +27,79 @@ function formatTime(seconds) {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
+function getNextMidnightSGT() {
+  const now = new Date();
+  // Current time in SGT
+  const sgtOffset = 8 * 60 * 60 * 1000;
+  const sgtNow = new Date(now.getTime() + sgtOffset);
+  // Next midnight SGT
+  const nextMidnight = new Date(sgtNow);
+  nextMidnight.setUTCHours(0, 0, 0, 0);
+  nextMidnight.setUTCDate(nextMidnight.getUTCDate() + 1);
+  // Convert back to local
+  return new Date(nextMidnight.getTime() - sgtOffset);
+}
+
+function formatCountdown(ms) {
+  if (ms <= 0) return '00:00:00';
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
 export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLogout, onHistory }) {
-  const [loading, setLoading] = useState(!puzzle);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [chain, setChain] = useState([]);            // words placed in chain slots
-  const [availableWords, setAvailableWords] = useState([]);  // words in the word bank
+  const [phase, setPhase] = useState('loading'); // loading, already_done, ready, playing
+  const [chain, setChain] = useState([]);
+  const [availableWords, setAvailableWords] = useState([]);
   const [timer, setTimer] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [completed, setCompleted] = useState(false);
-  const [wrongPair, setWrongPair] = useState(null);   // index of wrong link for shake animation
+  const [wrongPair, setWrongPair] = useState(null);
   const [draggedWord, setDraggedWord] = useState(null);
   const [dragOverSlot, setDragOverSlot] = useState(null);
+  const [countdown, setCountdown] = useState('');
+  const [alreadyDoneResult, setAlreadyDoneResult] = useState(null);
+  const [leaderboard, setLeaderboard] = useState([]);
   const timerRef = useRef(null);
-  const startedRef = useRef(false);
+  const countdownRef = useRef(null);
 
-  // Load puzzle
+  // Load puzzle and check completion
   useEffect(() => {
-    if (!puzzle) {
-      loadPuzzle();
-    } else {
-      initGame(puzzle);
-    }
+    loadPuzzleAndCheck();
+    return () => {
+      clearInterval(timerRef.current);
+      clearInterval(countdownRef.current);
+    };
   }, []);
 
-  async function loadPuzzle() {
+  async function loadPuzzleAndCheck() {
     setLoading(true);
     try {
-      let p = await getTodaysPuzzle();
+      // Load puzzle
+      let p = puzzle;
       if (!p) {
-        // No puzzle for today, try generating via Edge Function
-        p = await generatePuzzleViaEdge();
+        p = await getTodaysPuzzle();
+        if (!p) {
+          p = await generatePuzzleViaEdge();
+        }
+        setPuzzle(p);
       }
-      setPuzzle(p);
-      initGame(p);
+
+      // Check if already completed today
+      const { completed: done, result } = await hasCompletedToday(profile.id);
+      if (done) {
+        setAlreadyDoneResult(result);
+        setPhase('already_done');
+        startCountdown();
+        // Load leaderboard
+        loadLeaderboard(p.id);
+      } else {
+        setPhase('ready');
+      }
     } catch (err) {
       console.error('Failed to load puzzle:', err);
       setError('Could not load today\'s puzzle. Please try again later.');
@@ -68,14 +108,43 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
     }
   }
 
-  function initGame(p) {
-    const words = typeof p.words === 'string' ? JSON.parse(p.words) : p.words;
+  async function loadLeaderboard(puzzleId) {
+    try {
+      const { data } = await (await import('../lib/supabase')).supabase
+        .from('results')
+        .select('time_seconds, profiles(name, avatar_emoji)')
+        .eq('puzzle_id', puzzleId)
+        .order('time_seconds', { ascending: true })
+        .limit(10);
+      setLeaderboard(data || []);
+    } catch (err) {
+      console.error('Failed to load leaderboard:', err);
+    }
+  }
+
+  function startCountdown() {
+    function update() {
+      const diff = getNextMidnightSGT().getTime() - Date.now();
+      setCountdown(formatCountdown(diff));
+      if (diff <= 0) {
+        clearInterval(countdownRef.current);
+        // Reload when new puzzle is available
+        window.location.reload();
+      }
+    }
+    update();
+    countdownRef.current = setInterval(update, 1000);
+  }
+
+  function startPlaying() {
+    const words = typeof puzzle.words === 'string' ? JSON.parse(puzzle.words) : puzzle.words;
     setAvailableWords(shuffleArray(words));
     setChain(new Array(words.length).fill(null));
     setTimer(0);
-    setIsRunning(false);
     setCompleted(false);
-    startedRef.current = false;
+    setPhase('playing');
+    // Timer starts immediately
+    setIsRunning(true);
   }
 
   // Timer
@@ -86,20 +155,10 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
     return () => clearInterval(timerRef.current);
   }, [isRunning, completed]);
 
-  // Start timer on first interaction
-  function ensureStarted() {
-    if (!startedRef.current) {
-      startedRef.current = true;
-      setIsRunning(true);
-    }
-  }
-
   // Place a word into the next available chain slot
   function placeWord(word) {
-    ensureStarted();
     const nextSlot = chain.indexOf(null);
     if (nextSlot === -1) return;
-
     setChain((prev) => {
       const next = [...prev];
       next[nextSlot] = word;
@@ -113,11 +172,8 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
     if (completed) return;
     const word = chain[slotIndex];
     if (!word) return;
-
-    // Remove from this slot and shift remaining words down
     setChain((prev) => {
       const next = [...prev];
-      // Remove the word at slotIndex and shift everything after it
       for (let i = slotIndex; i < next.length - 1; i++) {
         next[i] = next[i + 1];
       }
@@ -127,55 +183,35 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
     setAvailableWords((prev) => [...prev, word]);
   }
 
-  // Drag and drop handlers
-  function handleDragStart(word) {
-    setDraggedWord(word);
-  }
-
-  function handleDragOver(e, slotIndex) {
-    e.preventDefault();
-    setDragOverSlot(slotIndex);
-  }
-
-  function handleDragLeave() {
-    setDragOverSlot(null);
-  }
+  function handleDragStart(word) { setDraggedWord(word); }
+  function handleDragOver(e, slotIndex) { e.preventDefault(); setDragOverSlot(slotIndex); }
+  function handleDragLeave() { setDragOverSlot(null); }
 
   function handleDrop(e, slotIndex) {
     e.preventDefault();
     setDragOverSlot(null);
-    if (draggedWord) {
-      ensureStarted();
-      // Place at the specific slot
-      if (chain[slotIndex] === null) {
-        setChain((prev) => {
-          const next = [...prev];
-          next[slotIndex] = draggedWord;
-          return next;
-        });
-        setAvailableWords((prev) => prev.filter((w) => w !== draggedWord));
-      }
+    if (draggedWord && chain[slotIndex] === null) {
+      setChain((prev) => {
+        const next = [...prev];
+        next[slotIndex] = draggedWord;
+        return next;
+      });
+      setAvailableWords((prev) => prev.filter((w) => w !== draggedWord));
       setDraggedWord(null);
     }
   }
 
-  // Check the chain
   async function checkChain() {
     if (!puzzle) return;
     const solution = typeof puzzle.solution === 'string' ? JSON.parse(puzzle.solution) : puzzle.solution;
-
-    // Check if all slots are filled
     if (chain.some((w) => w === null)) return;
 
-    // Compare with solution
     const isCorrect = chain.every((w, i) => w.toUpperCase() === solution[i].toUpperCase());
 
     if (isCorrect) {
       setCompleted(true);
       setIsRunning(false);
       clearInterval(timerRef.current);
-
-      // Save result
       try {
         const result = await saveResult(profile.id, puzzle.id, timer);
         onComplete({ ...result, time_seconds: timer });
@@ -184,7 +220,6 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
         onComplete({ time_seconds: timer });
       }
     } else {
-      // Find first wrong pair and shake
       for (let i = 0; i < chain.length - 1; i++) {
         const pair = `${chain[i]} ${chain[i + 1]}`.toLowerCase();
         const solPair = `${solution[i]} ${solution[i + 1]}`.toLowerCase();
@@ -197,7 +232,6 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
     }
   }
 
-  // Clear chain
   function clearChain() {
     if (completed) return;
     const wordsInChain = chain.filter(Boolean);
@@ -205,6 +239,7 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
     setChain(new Array(chain.length).fill(null));
   }
 
+  // ─── LOADING ────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-4">
@@ -219,16 +254,144 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
       <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6">
         <div className="text-4xl">😕</div>
         <p className="text-snow-600 text-center">{error}</p>
-        <button
-          onClick={loadPuzzle}
-          className="px-6 py-2.5 bg-accent-blue text-white font-display font-semibold rounded-xl"
-        >
+        <button onClick={loadPuzzleAndCheck} className="px-6 py-2.5 bg-accent-blue text-white font-display font-semibold rounded-xl">
           Try Again
         </button>
       </div>
     );
   }
 
+  // ─── ALREADY COMPLETED ──────────────────────────────────────
+  if (phase === 'already_done') {
+    return (
+      <div className="flex-1 flex flex-col px-6 py-6 overflow-y-auto animate-fade-in">
+        {/* Top bar */}
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={onLogout} className="flex items-center gap-1.5 text-snow-500 hover:text-snow-700 transition-colors">
+            <span className="text-lg">{profile.avatar_emoji}</span>
+            <span className="text-xs font-medium">{profile.name}</span>
+          </button>
+          <button onClick={onHistory} className="text-snow-400 hover:text-snow-600 transition-colors">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="text-5xl mb-4">✅</div>
+          <h1 className="font-display text-xl font-bold text-snow-800 mb-2">
+            Puzzle Complete!
+          </h1>
+          <p className="text-snow-500 text-sm mb-2">
+            You finished today's WordChain in
+          </p>
+          <p className="font-display text-3xl font-bold text-accent-blue mb-8">
+            {alreadyDoneResult ? formatTime(alreadyDoneResult.time_seconds) : '--:--'}
+          </p>
+
+          {/* Countdown to next puzzle */}
+          <div className="bg-white rounded-2xl shadow-card p-5 w-full mb-6 text-center">
+            <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-2">
+              Next puzzle in
+            </p>
+            <p className="font-display text-3xl font-bold text-snow-700 tabular-nums">
+              {countdown}
+            </p>
+          </div>
+
+          {/* Leaderboard */}
+          {leaderboard.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-card p-4 w-full mb-4">
+              <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-3 text-center">
+                Today's Leaderboard
+              </p>
+              <div className="space-y-2">
+                {leaderboard.map((entry, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-xl ${
+                      i === 0 ? 'bg-yellow-50' : i === 1 ? 'bg-snow-50' : i === 2 ? 'bg-orange-50/50' : ''
+                    }`}
+                  >
+                    <span className="font-display font-bold text-sm text-snow-400 w-5 text-center">
+                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`}
+                    </span>
+                    <span className="text-lg">{entry.profiles?.avatar_emoji}</span>
+                    <span className="font-display font-semibold text-sm text-snow-700 flex-1 truncate">
+                      {entry.profiles?.name}
+                    </span>
+                    <span className="font-display font-bold text-sm text-snow-500 tabular-nums">
+                      {formatTime(entry.time_seconds)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-4">
+          <button onClick={onHistory} className="flex-1 py-3 bg-snow-100 text-snow-600 font-display font-semibold text-sm rounded-xl hover:bg-snow-200 active:scale-[0.98] transition-all">
+            History
+          </button>
+          <button onClick={onLogout} className="flex-1 py-3 bg-accent-blue text-white font-display font-semibold text-sm rounded-xl hover:bg-blue-600 active:scale-[0.98] transition-all">
+            Switch Player
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── READY SCREEN ───────────────────────────────────────────
+  if (phase === 'ready') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 animate-fade-in">
+        {/* Top bar */}
+        <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
+          <button onClick={onLogout} className="flex items-center gap-1.5 text-snow-500 hover:text-snow-700 transition-colors">
+            <span className="text-lg">{profile.avatar_emoji}</span>
+            <span className="text-xs font-medium">{profile.name}</span>
+          </button>
+        </div>
+
+        <div className="text-center">
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center mx-auto mb-6 shadow-lg">
+            <span className="text-4xl">🔗</span>
+          </div>
+
+          <h1 className="font-display text-2xl font-bold text-snow-800 mb-2">
+            Daily WordChain
+          </h1>
+          {puzzle && (
+            <p className="text-snow-400 text-sm font-medium mb-2">
+              Puzzle #{puzzle.puzzle_number} &middot; {new Date(puzzle.puzzle_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </p>
+          )}
+
+          <div className="bg-white rounded-2xl shadow-card p-5 mb-8 text-left max-w-xs mx-auto">
+            <p className="text-snow-600 text-sm leading-relaxed mb-3">
+              Arrange <strong>7 words</strong> into a chain where each pair of neighbors forms a common phrase or compound word.
+            </p>
+            <p className="text-snow-400 text-xs">
+              The timer starts as soon as you begin!
+            </p>
+          </div>
+
+          <button
+            onClick={startPlaying}
+            className="w-full max-w-xs py-4 bg-accent-green text-white font-display font-bold text-xl rounded-2xl shadow-lg hover:bg-green-600 active:scale-[0.97] transition-all animate-pulse-slow"
+          >
+            I'm Ready!
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── PLAYING ────────────────────────────────────────────────
   const filledCount = chain.filter(Boolean).length;
   const totalSlots = chain.length;
   const allFilled = filledCount === totalSlots;
@@ -237,19 +400,12 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
     <div className="flex-1 flex flex-col px-4 py-4 animate-fade-in overflow-hidden">
       {/* Top bar */}
       <div className="flex items-center justify-between mb-3">
-        <button
-          onClick={onLogout}
-          className="flex items-center gap-1.5 text-snow-500 hover:text-snow-700 transition-colors"
-        >
+        <button onClick={onLogout} className="flex items-center gap-1.5 text-snow-500 hover:text-snow-700 transition-colors">
           <span className="text-lg">{profile.avatar_emoji}</span>
           <span className="text-xs font-medium text-snow-500">{profile.name}</span>
         </button>
-
         <div className="flex items-center gap-3">
-          <button
-            onClick={onHistory}
-            className="text-snow-400 hover:text-snow-600 transition-colors"
-          >
+          <button onClick={onHistory} className="text-snow-400 hover:text-snow-600 transition-colors">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
@@ -260,9 +416,7 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
 
       {/* Puzzle info */}
       <div className="text-center mb-4">
-        <h1 className="font-display text-lg font-bold text-snow-800">
-          Daily WordChain
-        </h1>
+        <h1 className="font-display text-lg font-bold text-snow-800">Daily WordChain</h1>
         {puzzle && (
           <p className="text-snow-400 text-xs font-medium">
             Puzzle #{puzzle.puzzle_number} &middot; {new Date(puzzle.puzzle_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -279,9 +433,7 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
           </svg>
-          <span className="font-display font-bold text-lg tabular-nums">
-            {formatTime(timer)}
-          </span>
+          <span className="font-display font-bold text-lg tabular-nums">{formatTime(timer)}</span>
         </div>
       </div>
 
@@ -290,10 +442,8 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
         <p className="text-xs text-snow-400 font-medium text-center mb-1">
           Build your word chain ({filledCount}/{totalSlots})
         </p>
-
         {chain.map((word, i) => (
           <div key={i}>
-            {/* Chain slot */}
             <div
               onDragOver={(e) => !word && handleDragOver(e, i)}
               onDragLeave={handleDragLeave}
@@ -304,12 +454,9 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
                   ? `bg-white border-snow-200 shadow-tile cursor-pointer hover:shadow-tile-active ${
                       wrongPair === i || wrongPair === i - 1 ? 'animate-shake border-accent-red' : ''
                     }`
-                  : `border-dashed border-snow-200 bg-snow-50/50 ${
-                      dragOverSlot === i ? 'drag-over' : ''
-                    }`
+                  : `border-dashed border-snow-200 bg-snow-50/50 ${dragOverSlot === i ? 'drag-over' : ''}`
               }`}
             >
-              {/* Position number */}
               <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                 word
                   ? `${TILE_COLORS[i % TILE_COLORS.length].bg} ${TILE_COLORS[i % TILE_COLORS.length].text}`
@@ -317,45 +464,25 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
               }`}>
                 {i + 1}
               </div>
-
-              {/* Word or placeholder */}
               {word ? (
                 <span className={`font-display font-bold text-base ${TILE_COLORS[i % TILE_COLORS.length].text}`}>
                   {word.toUpperCase()}
                 </span>
               ) : (
-                <span className="text-snow-300 text-sm">
-                  Drag or tap a word here
-                </span>
+                <span className="text-snow-300 text-sm">Drag or tap a word here</span>
               )}
-
-              {/* Remove hint */}
               {word && !completed && (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  className="ml-auto text-snow-300 flex-shrink-0"
-                >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="ml-auto text-snow-300 flex-shrink-0">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               )}
             </div>
-
-            {/* Chain connector */}
             {i < chain.length - 1 && word && chain[i + 1] && (
               <div className="flex justify-center py-0.5">
-                <div
-                  className="w-0.5 h-3 rounded-full"
-                  style={{
-                    background: `linear-gradient(to bottom, ${TILE_COLORS[i % TILE_COLORS.length].accent}, ${TILE_COLORS[(i + 1) % TILE_COLORS.length].accent})`,
-                  }}
-                />
+                <div className="w-0.5 h-3 rounded-full" style={{
+                  background: `linear-gradient(to bottom, ${TILE_COLORS[i % TILE_COLORS.length].accent}, ${TILE_COLORS[(i + 1) % TILE_COLORS.length].accent})`,
+                }} />
               </div>
             )}
           </div>
@@ -365,9 +492,7 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
       {/* Word bank */}
       {availableWords.length > 0 && (
         <div className="mb-3">
-          <p className="text-xs text-snow-400 font-medium text-center mb-2">
-            Available words
-          </p>
+          <p className="text-xs text-snow-400 font-medium text-center mb-2">Available words</p>
           <div className="flex flex-wrap gap-2 justify-center">
             {availableWords.map((word, i) => (
               <button
@@ -377,9 +502,7 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
                 onClick={() => placeWord(word)}
                 className="word-tile px-4 py-2 bg-white rounded-xl border-2 border-snow-200 shadow-tile hover:shadow-tile-active active:scale-95 transition-all duration-150"
               >
-                <span className="font-display font-bold text-sm text-snow-700">
-                  {word.toUpperCase()}
-                </span>
+                <span className="font-display font-bold text-sm text-snow-700">{word.toUpperCase()}</span>
               </button>
             ))}
           </div>
@@ -389,26 +512,19 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
       {/* Action buttons */}
       <div className="flex gap-2">
         {!allFilled && (
-          <button
-            onClick={clearChain}
-            disabled={filledCount === 0}
-            className="flex-1 py-3 bg-snow-100 text-snow-600 font-display font-semibold text-sm rounded-xl hover:bg-snow-200 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-          >
+          <button onClick={clearChain} disabled={filledCount === 0}
+            className="flex-1 py-3 bg-snow-100 text-snow-600 font-display font-semibold text-sm rounded-xl hover:bg-snow-200 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
             Clear All
           </button>
         )}
         {allFilled && (
           <>
-            <button
-              onClick={clearChain}
-              className="flex-1 py-3 bg-snow-100 text-snow-600 font-display font-semibold text-sm rounded-xl hover:bg-snow-200 active:scale-[0.98] transition-all"
-            >
+            <button onClick={clearChain}
+              className="flex-1 py-3 bg-snow-100 text-snow-600 font-display font-semibold text-sm rounded-xl hover:bg-snow-200 active:scale-[0.98] transition-all">
               Reset
             </button>
-            <button
-              onClick={checkChain}
-              className="flex-[2] py-3 bg-accent-green text-white font-display font-bold text-base rounded-xl shadow-md hover:bg-green-600 active:scale-[0.98] transition-all animate-pulse-slow"
-            >
+            <button onClick={checkChain}
+              className="flex-[2] py-3 bg-accent-green text-white font-display font-bold text-base rounded-xl shadow-md hover:bg-green-600 active:scale-[0.98] transition-all animate-pulse-slow">
               Check Chain!
             </button>
           </>

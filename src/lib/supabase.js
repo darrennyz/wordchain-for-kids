@@ -47,8 +47,15 @@ export async function verifyPin(profileId, pin) {
 
 // ─── Puzzle helpers ───────────────────────────────────────────────
 
+function getTodayDateSGT() {
+  // Get today's date in Singapore timezone (UTC+8)
+  const now = new Date();
+  const sgt = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+  return sgt.toISOString().split('T')[0];
+}
+
 export async function getTodaysPuzzle() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayDateSGT();
   const { data, error } = await supabase
     .from('puzzles')
     .select('*')
@@ -56,6 +63,25 @@ export async function getTodaysPuzzle() {
     .single();
   if (error && error.code !== 'PGRST116') throw error;
   return data;
+}
+
+export async function hasCompletedToday(profileId) {
+  const today = getTodayDateSGT();
+  const { data: puzzle } = await supabase
+    .from('puzzles')
+    .select('id')
+    .eq('puzzle_date', today)
+    .single();
+  if (!puzzle) return { completed: false, result: null };
+
+  const { data: result } = await supabase
+    .from('results')
+    .select('*')
+    .eq('profile_id', profileId)
+    .eq('puzzle_id', puzzle.id)
+    .single();
+
+  return { completed: !!result, result, puzzleId: puzzle.id };
 }
 
 export async function generatePuzzleViaEdge() {

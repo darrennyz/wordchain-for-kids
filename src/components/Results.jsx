@@ -7,15 +7,47 @@ function formatTime(seconds) {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
+function getNextMidnightSGT() {
+  const now = new Date();
+  const sgtOffset = 8 * 60 * 60 * 1000;
+  const sgtNow = new Date(now.getTime() + sgtOffset);
+  const nextMidnight = new Date(sgtNow);
+  nextMidnight.setUTCHours(0, 0, 0, 0);
+  nextMidnight.setUTCDate(nextMidnight.getUTCDate() + 1);
+  return new Date(nextMidnight.getTime() - sgtOffset);
+}
+
+function formatCountdown(ms) {
+  if (ms <= 0) return '00:00:00';
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
 export default function Results({ profile, result, puzzle, onHistory, onLogout }) {
   const [leaderboard, setLeaderboard] = useState([]);
   const [stats, setStats] = useState(null);
   const [showConfetti, setShowConfetti] = useState(true);
+  const [countdown, setCountdown] = useState('');
 
   useEffect(() => {
     loadData();
-    const timer = setTimeout(() => setShowConfetti(false), 3000);
-    return () => clearTimeout(timer);
+    const confettiTimer = setTimeout(() => setShowConfetti(false), 3000);
+
+    // Start countdown
+    function updateCountdown() {
+      const diff = getNextMidnightSGT().getTime() - Date.now();
+      setCountdown(formatCountdown(diff));
+    }
+    updateCountdown();
+    const cdInterval = setInterval(updateCountdown, 1000);
+
+    return () => {
+      clearTimeout(confettiTimer);
+      clearInterval(cdInterval);
+    };
   }, []);
 
   async function loadData() {
@@ -84,6 +116,16 @@ export default function Results({ profile, result, puzzle, onHistory, onLogout }
         </p>
         <p className="font-display text-4xl font-bold text-accent-blue">
           {formatTime(timeSeconds)}
+        </p>
+      </div>
+
+      {/* Countdown to next puzzle */}
+      <div className="bg-white rounded-2xl shadow-card p-4 mb-4 text-center">
+        <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-1">
+          Next puzzle in
+        </p>
+        <p className="font-display text-2xl font-bold text-snow-700 tabular-nums">
+          {countdown}
         </p>
       </div>
 
