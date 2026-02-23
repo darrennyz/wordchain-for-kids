@@ -315,7 +315,8 @@ Respond with ONLY valid JSON, no other text:
 "words" = SCRAMBLED order. "solution" = CORRECT chain order. "pair_explanations" = the compound word each pair forms.`;
 
 // Validate that every adjacent pair in the solution exists in VERIFIED_PAIRS
-function validateChain(solution) {
+// AND that words and solution contain the exact same set of words
+function validateChain(solution, words) {
   const errors = [];
   for (let i = 0; i < solution.length - 1; i++) {
     const a = solution[i].toUpperCase();
@@ -325,12 +326,18 @@ function validateChain(solution) {
       errors.push(`${a}+${b} is not a verified pair`);
     }
   }
+  // Verify words and solution contain the same set of words
+  if (words) {
+    const sortedWords = [...words].map(w => w.toUpperCase()).sort().join(',');
+    const sortedSolution = [...solution].map(w => w.toUpperCase()).sort().join(',');
+    if (sortedWords !== sortedSolution) {
+      errors.push(`words [${sortedWords}] do not match solution [${sortedSolution}]`);
+    }
+  }
   return errors;
 }
 
-async function generateOnePuzzle(theme) {
-  const themeHint = theme ? `\n\nFor variety, lean towards words related to: ${theme}` : '';
-
+async function generateOnePuzzle() {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -341,7 +348,7 @@ async function generateOnePuzzle(theme) {
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
-      messages: [{ role: 'user', content: PROMPT + themeHint }],
+      messages: [{ role: 'user', content: PROMPT }],
     }),
   });
 
@@ -354,27 +361,14 @@ async function generateOnePuzzle(theme) {
   const content = data.content[0].text;
   const puzzle = JSON.parse(content);
 
-  // Validate against our verified pairs dictionary
-  const errors = validateChain(puzzle.solution);
+  // Validate against our verified pairs dictionary AND check words match solution
+  const errors = validateChain(puzzle.solution, puzzle.words);
   if (errors.length > 0) {
-    throw new Error(`Invalid pairs in chain: ${errors.join(', ')}`);
+    throw new Error(`Invalid puzzle: ${errors.join(', ')}`);
   }
 
   return puzzle;
 }
-
-const THEMES = [
-  'animals and nature',
-  'food and cooking',
-  'space and stars',
-  'ocean and sea life',
-  'sports and play',
-  'school and learning',
-  'weather and seasons',
-  'colors and art',
-  'home and family',
-  'music and sounds',
-];
 
 async function main() {
   console.log(`Generating puzzles for the next ${daysAhead} days...\n`);
@@ -405,8 +399,7 @@ async function main() {
       continue;
     }
 
-    const theme = THEMES[i % THEMES.length];
-    console.log(`  [GEN]  ${dateStr} - theme: ${theme}...`);
+    console.log(`  [GEN]  ${dateStr}...`);
 
     let success = false;
 
@@ -415,7 +408,7 @@ async function main() {
       for (let attempt = 1; attempt <= 50; attempt++) {
         try {
           console.log(`           Claude attempt ${attempt}/50...`);
-          const puzzle = await generateOnePuzzle(theme);
+          const puzzle = await generateOnePuzzle();
 
           if (!puzzle.words || !puzzle.solution || puzzle.words.length !== 7) {
             console.log(`           invalid format, retrying...`);

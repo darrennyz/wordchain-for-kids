@@ -21,7 +21,7 @@ export default function ProfileSelect({ onSelectProfile, onCreateNew, onViewLead
   }
 
   return (
-    <div className="flex-1 flex flex-col px-6 py-8 animate-fade-in">
+    <div className="flex-1 flex flex-col px-6 py-8 animate-fade-in overflow-hidden">
       {/* Header */}
       <div className="text-center mb-6">
         <h1 className="font-display text-2xl font-bold text-snow-800">

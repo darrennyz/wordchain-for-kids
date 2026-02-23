@@ -144,7 +144,7 @@ function generateChainAlgorithmic(): string[] | null {
   return null;
 }
 
-function validateChain(solution: string[]): string[] {
+function validateChain(solution: string[], words?: string[]): string[] {
   const errors: string[] = [];
   for (let i = 0; i < solution.length - 1; i++) {
     const a = solution[i].toUpperCase();
@@ -152,6 +152,14 @@ function validateChain(solution: string[]): string[] {
     const targets = VERIFIED_PAIRS[a];
     if (!targets || !targets.includes(b)) {
       errors.push(`${a}+${b} is not a verified pair`);
+    }
+  }
+  // Verify words and solution contain the same set of words
+  if (words) {
+    const sortedWords = [...words].map(w => w.toUpperCase()).sort().join(',');
+    const sortedSolution = [...solution].map(w => w.toUpperCase()).sort().join(',');
+    if (sortedWords !== sortedSolution) {
+      errors.push(`words do not match solution`);
     }
   }
   return errors;
@@ -225,7 +233,7 @@ Respond with ONLY valid JSON:
           const parsed = JSON.parse(content);
 
           if (parsed.words?.length === 7 && parsed.solution?.length === 7) {
-            const errors = validateChain(parsed.solution);
+            const errors = validateChain(parsed.solution, parsed.words);
             if (errors.length === 0) {
               puzzleData = parsed;
               break;
