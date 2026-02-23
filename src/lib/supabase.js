@@ -167,6 +167,86 @@ export async function getProfileStats(profileId) {
   return { totalPlayed: results.length, bestTime, avgTime, streak };
 }
 
+// ─── Weekly Leaderboard ──────────────────────────────────────────
+
+export function getWeekBoundariesSGT() {
+  const now = new Date();
+  const sgtNow = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+  // Day of week: 0=Sun, 1=Mon, ..., 6=Sat
+  const dayOfWeek = sgtNow.getUTCDay();
+  const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  // Monday 00:00:00 SGT
+  const monday = new Date(sgtNow);
+  monday.setUTCDate(monday.getUTCDate() - mondayOffset);
+  monday.setUTCHours(0, 0, 0, 0);
+  // Sunday 23:59:59 SGT
+  const sunday = new Date(monday);
+  sunday.setUTCDate(sunday.getUTCDate() + 6);
+  // Convert back to actual dates (subtract SGT offset for ISO strings)
+  const mondayDate = new Date(monday.getTime() - (8 * 60 * 60 * 1000)).toISOString().split('T')[0];
+  const sundayDate = new Date(sunday.getTime() - (8 * 60 * 60 * 1000)).toISOString().split('T')[0];
+  // Display label
+  const opts = { month: 'short', day: 'numeric' };
+  const mondayLabel = monday.toLocaleDateString('en-US', { ...opts, timeZone: 'UTC' });
+  const sundayLabel = sunday.toLocaleDateString('en-US', { ...opts, timeZone: 'UTC', year: 'numeric' });
+  return { mondayDate, sundayDate, weekLabel: `${mondayLabel} – ${sundayLabel}` };
+}
+
+export async function getWeeklyLeaderboard() {
+  const { mondayDate, sundayDate, weekLabel } = getWeekBoundariesSGT();
+
+  // Get all puzzle IDs for this week
+  const { data: weekPuzzles, error: puzzleErr } = await supabase
+    .from('puzzles')
+    .select('id')
+    .gte('puzzle_date', mondayDate)
+    .lte('puzzle_date', sundayDate);
+
+  if (puzzleErr) throw puzzleErr;
+  if (!weekPuzzles || weekPuzzles.length === 0) {
+    return { leaderboard: [], weekLabel };
+  }
+
+  const puzzleIds = weekPuzzles.map((p) => p.id);
+
+  // Get all results for those puzzles
+  const { data: results, error: resultErr } = await supabase
+    .from('results')
+    .select('profile_id, time_seconds, profiles(name, avatar_emoji)')
+    .in('puzzle_id', puzzleIds);
+
+  if (resultErr) throw resultErr;
+  if (!results || results.length === 0) {
+    return { leaderboard: [], weekLabel };
+  }
+
+  // Aggregate by profile: avg time and games played
+  const profileMap = {};
+  for (const r of results) {
+    if (!profileMap[r.profile_id]) {
+      profileMap[r.profile_id] = {
+        profile_id: r.profile_id,
+        name: r.profiles?.name || 'Unknown',
+        avatar_emoji: r.profiles?.avatar_emoji || '?',
+        totalTime: 0,
+        gamesPlayed: 0,
+      };
+    }
+    profileMap[r.profile_id].totalTime += r.time_seconds;
+    profileMap[r.profile_id].gamesPlayed += 1;
+  }
+
+  // Calculate averages and sort
+  const leaderboard = Object.values(profileMap)
+    .map((p) => ({
+      ...p,
+      avgTime: Math.round(p.totalTime / p.gamesPlayed),
+    }))
+    .sort((a, b) => a.avgTime - b.avgTime);
+
+  return { leaderboard, weekLabel };
+}
+
 // ─── Utility ──────────────────────────────────────────────────────
 
 async function hashPin(pin) {

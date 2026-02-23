@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getProfiles } from '../lib/supabase';
 
-export default function ProfileSelect({ onSelectProfile, onCreateNew }) {
+export default function ProfileSelect({ onSelectProfile, onCreateNew, onViewLeaderboard }) {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,7 +23,7 @@ export default function ProfileSelect({ onSelectProfile, onCreateNew }) {
   return (
     <div className="flex-1 flex flex-col px-6 py-8 animate-fade-in">
       {/* Header */}
-      <div className="text-center mb-8">
+      <div className="text-center mb-6">
         <h1 className="font-display text-2xl font-bold text-snow-800">
           Who's playing?
         </h1>
@@ -31,6 +31,18 @@ export default function ProfileSelect({ onSelectProfile, onCreateNew }) {
           Pick your player or create a new one
         </p>
       </div>
+
+      {/* Weekly Leaderboard button */}
+      <button
+        onClick={onViewLeaderboard}
+        className="w-full flex items-center justify-center gap-2 px-4 py-3 mb-5 bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-2xl hover:from-yellow-100 hover:to-orange-100 active:scale-[0.98] transition-all"
+      >
+        <span className="text-lg">🏆</span>
+        <span className="font-display font-semibold text-sm text-yellow-700">Weekly Leaderboard</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-500 ml-auto">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
 
       {/* Profile grid */}
       <div className="flex-1 overflow-y-auto">

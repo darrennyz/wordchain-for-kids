@@ -8,6 +8,7 @@ const SCREENS = {
   GAME: 'game',
   RESULTS: 'results',
   HISTORY: 'history',
+  WEEKLY_LEADERBOARD: 'weekly_leaderboard',
 };
 
 export { SCREENS };
@@ -25,6 +26,7 @@ export function useGameState() {
   const goToGame = useCallback(() => setScreen(SCREENS.GAME), []);
   const goToResults = useCallback(() => setScreen(SCREENS.RESULTS), []);
   const goToHistory = useCallback(() => setScreen(SCREENS.HISTORY), []);
+  const goToWeeklyLeaderboard = useCallback(() => setScreen(SCREENS.WEEKLY_LEADERBOARD), []);
 
   const goToPinEntry = useCallback((profile) => {
     setSelectedProfileForPin(profile);
@@ -63,5 +65,6 @@ export function useGameState() {
     goToHistory,
     loginProfile,
     logout,
+    goToWeeklyLeaderboard,
   };
 }

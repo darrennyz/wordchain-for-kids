@@ -7,6 +7,7 @@ import PinEntry from './PinEntry';
 import GameBoard from './GameBoard';
 import Results from './Results';
 import History from './History';
+import WeeklyLeaderboard from './WeeklyLeaderboard';
 
 export default function App() {
   const state = useGameState();
@@ -28,6 +29,7 @@ export default function App() {
           <ProfileSelect
             onSelectProfile={state.goToPinEntry}
             onCreateNew={state.goToCreateProfile}
+            onViewLeaderboard={state.goToWeeklyLeaderboard}
           />
         );
       case SCREENS.CREATE_PROFILE:
@@ -76,6 +78,12 @@ export default function App() {
             profile={state.currentProfile}
             onBack={state.goToGame}
             onLogout={state.logout}
+          />
+        );
+      case SCREENS.WEEKLY_LEADERBOARD:
+        return (
+          <WeeklyLeaderboard
+            onBack={state.goToProfileSelect}
           />
         );
       default:
