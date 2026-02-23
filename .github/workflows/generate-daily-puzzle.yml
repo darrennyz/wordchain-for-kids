@@ -16,9 +16,14 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Generate today's puzzle + stockpile 20 days ahead
+      - name: Generate WordChain puzzles (stockpile 20 days)
         run: node scripts/generate-puzzles.js 20
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      - name: Generate Sudoku puzzles (stockpile 20 days)
+        run: node scripts/generate-sudoku-puzzles.js 20
+        env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

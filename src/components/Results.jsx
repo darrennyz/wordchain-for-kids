@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getTodaysLeaderboard, getProfileStats } from '../lib/supabase';
+import { getTodaysLeaderboard, getTodaysSudokuLeaderboard, getProfileStats } from '../lib/supabase';
 
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60);
@@ -26,17 +26,21 @@ function formatCountdown(ms) {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function Results({ profile, result, puzzle, onHistory, onLogout }) {
+export default function Results({ profile, result, puzzle, gameType, onHistory, onBack }) {
   const [leaderboard, setLeaderboard] = useState([]);
   const [stats, setStats] = useState(null);
   const [showConfetti, setShowConfetti] = useState(true);
   const [countdown, setCountdown] = useState('');
 
+  const isSudoku = gameType === 'sudoku';
+  const gameName = isSudoku ? 'Sudoku' : 'WordChain';
+  const gameEmoji = isSudoku ? '🔢' : '🔗';
+  const accentColor = isSudoku ? 'text-accent-green' : 'text-accent-blue';
+
   useEffect(() => {
     loadData();
     const confettiTimer = setTimeout(() => setShowConfetti(false), 3000);
 
-    // Start countdown
     function updateCountdown() {
       const diff = getNextMidnightSGT().getTime() - Date.now();
       setCountdown(formatCountdown(diff));
@@ -52,8 +56,9 @@ export default function Results({ profile, result, puzzle, onHistory, onLogout }
 
   async function loadData() {
     try {
+      const leaderboardFn = isSudoku ? getTodaysSudokuLeaderboard : getTodaysLeaderboard;
       const [lb, st] = await Promise.all([
-        puzzle ? getTodaysLeaderboard(puzzle.id) : [],
+        puzzle ? leaderboardFn(puzzle.id) : [],
         getProfileStats(profile.id),
       ]);
       setLeaderboard(lb);
@@ -64,15 +69,24 @@ export default function Results({ profile, result, puzzle, onHistory, onLogout }
   }
 
   const timeSeconds = result?.time_seconds || 0;
-  const pairExplanations = puzzle?.pair_explanations
+
+  // WordChain-specific data
+  const pairExplanations = !isSudoku && puzzle?.pair_explanations
     ? typeof puzzle.pair_explanations === 'string'
       ? JSON.parse(puzzle.pair_explanations)
       : puzzle.pair_explanations
     : [];
-  const solution = puzzle?.solution
+  const solution = !isSudoku && puzzle?.solution
     ? typeof puzzle.solution === 'string'
       ? JSON.parse(puzzle.solution)
       : puzzle.solution
+    : [];
+
+  // Sudoku-specific data
+  const sudokuGrid = isSudoku && puzzle?.grid
+    ? typeof puzzle.grid === 'string'
+      ? JSON.parse(puzzle.grid)
+      : puzzle.grid
     : [];
 
   return (
@@ -105,7 +119,7 @@ export default function Results({ profile, result, puzzle, onHistory, onLogout }
           Amazing!
         </h1>
         <p className="text-snow-500 text-sm mt-1">
-          You completed today's WordChain!
+          You completed today's {gameName}!
         </p>
       </div>
 
@@ -114,7 +128,7 @@ export default function Results({ profile, result, puzzle, onHistory, onLogout }
         <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-1">
           Your Time
         </p>
-        <p className="font-display text-4xl font-bold text-accent-blue">
+        <p className={`font-display text-4xl font-bold ${accentColor}`}>
           {formatTime(timeSeconds)}
         </p>
       </div>
@@ -159,8 +173,8 @@ export default function Results({ profile, result, puzzle, onHistory, onLogout }
         </div>
       )}
 
-      {/* Solution chain */}
-      {solution.length > 0 && (
+      {/* WordChain solution chain */}
+      {!isSudoku && solution.length > 0 && (
         <div className="bg-white rounded-2xl shadow-card p-4 mb-4">
           <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-3 text-center">
             Today's Chain
@@ -193,11 +207,38 @@ export default function Results({ profile, result, puzzle, onHistory, onLogout }
         </div>
       )}
 
+      {/* Sudoku completed grid */}
+      {isSudoku && sudokuGrid.length === 16 && (
+        <div className="bg-white rounded-2xl shadow-card p-4 mb-4">
+          <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-3 text-center">
+            Completed Grid
+          </p>
+          <div className="flex justify-center">
+            <div className="inline-grid grid-cols-4 gap-0 border-2 border-snow-600 rounded-lg overflow-hidden">
+              {sudokuGrid.map((val, i) => {
+                const row = Math.floor(i / 4);
+                const col = i % 4;
+                const borderRight = col === 1 ? 'border-r-2 border-r-snow-500' : col < 3 ? 'border-r border-r-snow-200' : '';
+                const borderBottom = row === 1 ? 'border-b-2 border-b-snow-500' : row < 3 ? 'border-b border-b-snow-200' : '';
+                return (
+                  <div
+                    key={i}
+                    className={`w-11 h-11 flex items-center justify-center font-display font-bold text-lg text-accent-green ${borderRight} ${borderBottom} bg-green-50/30`}
+                  >
+                    {val}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Leaderboard */}
       {leaderboard.length > 0 && (
         <div className="bg-white rounded-2xl shadow-card p-4 mb-4">
           <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-3 text-center">
-            Today's Leaderboard
+            Today's {gameName} Leaderboard
           </p>
           <div className="space-y-2">
             {leaderboard.map((entry, i) => (
@@ -232,10 +273,10 @@ export default function Results({ profile, result, puzzle, onHistory, onLogout }
           History
         </button>
         <button
-          onClick={onLogout}
-          className="flex-1 py-3 bg-accent-blue text-white font-display font-semibold text-sm rounded-xl hover:bg-blue-600 active:scale-[0.98] transition-all"
+          onClick={onBack}
+          className={`flex-1 py-3 ${isSudoku ? 'bg-accent-green hover:bg-green-600' : 'bg-accent-blue hover:bg-blue-600'} text-white font-display font-semibold text-sm rounded-xl active:scale-[0.98] transition-all`}
         >
-          Switch Player
+          Back to Games
         </button>
       </div>
     </div>

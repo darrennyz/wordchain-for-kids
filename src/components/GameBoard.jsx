@@ -49,7 +49,7 @@ function formatCountdown(ms) {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLogout, onHistory }) {
+export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLogout, onHistory, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [phase, setPhase] = useState('loading'); // loading, already_done, ready, playing
@@ -355,8 +355,8 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
           <button onClick={onHistory} className="flex-1 py-3 bg-snow-100 text-snow-600 font-display font-semibold text-sm rounded-xl hover:bg-snow-200 active:scale-[0.98] transition-all">
             History
           </button>
-          <button onClick={onLogout} className="flex-1 py-3 bg-accent-blue text-white font-display font-semibold text-sm rounded-xl hover:bg-blue-600 active:scale-[0.98] transition-all">
-            Switch Player
+          <button onClick={onBack || onLogout} className="flex-1 py-3 bg-accent-blue text-white font-display font-semibold text-sm rounded-xl hover:bg-blue-600 active:scale-[0.98] transition-all">
+            Back to Games
           </button>
         </div>
       </div>
@@ -369,9 +369,11 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
       <div className="flex-1 flex flex-col items-center justify-center px-6 animate-fade-in">
         {/* Top bar */}
         <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
-          <button onClick={onLogout} className="flex items-center gap-1.5 text-snow-500 hover:text-snow-700 transition-colors">
-            <span className="text-lg">{profile.avatar_emoji}</span>
-            <span className="text-xs font-medium">{profile.name}</span>
+          <button onClick={onBack || onLogout} className="flex items-center gap-1.5 text-snow-500 hover:text-snow-700 transition-colors">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            <span className="text-xs font-medium">Games</span>
           </button>
         </div>
 

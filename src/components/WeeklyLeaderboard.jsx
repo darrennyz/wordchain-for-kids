@@ -54,7 +54,7 @@ export default function WeeklyLeaderboard({ onBack }) {
       </div>
 
       <p className="text-snow-400 text-xs mb-4 text-center">
-        Ranked by average time &middot; Resets every Monday
+        Combined WordChain + Sudoku &middot; Ranked by avg time &middot; Resets Monday
       </p>
 
       {/* Content */}

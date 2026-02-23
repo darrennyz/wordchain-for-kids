@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getProfileResults, getProfileStats } from '../lib/supabase';
+import { getProfileAllResults, getProfileStats } from '../lib/supabase';
 
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60);
@@ -19,7 +19,7 @@ export default function History({ profile, onBack, onLogout }) {
   async function loadHistory() {
     try {
       const [res, st] = await Promise.all([
-        getProfileResults(profile.id),
+        getProfileAllResults(profile.id),
         getProfileStats(profile.id),
       ]);
       setResults(res);
@@ -115,8 +115,8 @@ export default function History({ profile, onBack, onLogout }) {
         ) : (
           <div className="space-y-2">
             {results.map((r, i) => {
-              const date = r.puzzles
-                ? new Date(r.puzzles.puzzle_date).toLocaleDateString('en-US', {
+              const date = r.puzzle_date
+                ? new Date(r.puzzle_date).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
                   })
@@ -124,14 +124,20 @@ export default function History({ profile, onBack, onLogout }) {
                     month: 'short',
                     day: 'numeric',
                   });
-              const puzzleNum = r.puzzles?.puzzle_number;
+              const puzzleNum = r.puzzle_number;
+              const isWordchain = r.gameType === 'wordchain';
 
               return (
                 <div
-                  key={r.id}
+                  key={`${r.gameType}-${r.id}`}
                   className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl shadow-card"
                   style={{ animationDelay: `${i * 0.03}s` }}
                 >
+                  {/* Game type badge */}
+                  <div className="flex-shrink-0 w-8 text-center text-lg">
+                    {isWordchain ? '🔗' : '🔢'}
+                  </div>
+
                   {/* Date */}
                   <div className="flex-shrink-0 w-14 text-center">
                     <p className="font-display font-bold text-sm text-snow-700">
@@ -149,12 +155,12 @@ export default function History({ profile, onBack, onLogout }) {
 
                   {/* Time */}
                   <div className="flex-1">
-                    <span className="font-display font-bold text-lg text-accent-blue tabular-nums">
+                    <span className={`font-display font-bold text-lg tabular-nums ${isWordchain ? 'text-accent-blue' : 'text-accent-green'}`}>
                       {formatTime(r.time_seconds)}
                     </span>
                   </div>
 
-                  {/* Rank indicator */}
+                  {/* Best indicator */}
                   {r.time_seconds <= (stats?.bestTime || Infinity) && (
                     <span className="text-xs font-display font-semibold text-accent-yellow bg-yellow-50 px-2 py-0.5 rounded-full">
                       Best!

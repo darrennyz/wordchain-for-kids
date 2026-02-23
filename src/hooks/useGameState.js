@@ -5,6 +5,7 @@ const SCREENS = {
   PROFILE_SELECT: 'profile_select',
   CREATE_PROFILE: 'create_profile',
   PIN_ENTRY: 'pin_entry',
+  GAME_MENU: 'game_menu',
   GAME: 'game',
   RESULTS: 'results',
   HISTORY: 'history',
@@ -17,12 +18,15 @@ export function useGameState() {
   const [screen, setScreen] = useState(SCREENS.SPLASH);
   const [currentProfile, setCurrentProfile] = useState(null);
   const [currentPuzzle, setCurrentPuzzle] = useState(null);
+  const [currentSudokuPuzzle, setCurrentSudokuPuzzle] = useState(null);
+  const [selectedGame, setSelectedGame] = useState(null); // 'wordchain' | 'sudoku'
   const [lastResult, setLastResult] = useState(null);
   const [selectedProfileForPin, setSelectedProfileForPin] = useState(null);
 
   const goToSplash = useCallback(() => setScreen(SCREENS.SPLASH), []);
   const goToProfileSelect = useCallback(() => setScreen(SCREENS.PROFILE_SELECT), []);
   const goToCreateProfile = useCallback(() => setScreen(SCREENS.CREATE_PROFILE), []);
+  const goToGameMenu = useCallback(() => setScreen(SCREENS.GAME_MENU), []);
   const goToGame = useCallback(() => setScreen(SCREENS.GAME), []);
   const goToResults = useCallback(() => setScreen(SCREENS.RESULTS), []);
   const goToHistory = useCallback(() => setScreen(SCREENS.HISTORY), []);
@@ -33,17 +37,21 @@ export function useGameState() {
     setScreen(SCREENS.PIN_ENTRY);
   }, []);
 
-  const loginProfile = useCallback(
-    (profile) => {
-      setCurrentProfile(profile);
-      setScreen(SCREENS.GAME);
-    },
-    []
-  );
+  const loginProfile = useCallback((profile) => {
+    setCurrentProfile(profile);
+    setScreen(SCREENS.GAME_MENU);
+  }, []);
+
+  const selectGame = useCallback((gameType) => {
+    setSelectedGame(gameType);
+    setScreen(SCREENS.GAME);
+  }, []);
 
   const logout = useCallback(() => {
     setCurrentProfile(null);
     setCurrentPuzzle(null);
+    setCurrentSudokuPuzzle(null);
+    setSelectedGame(null);
     setLastResult(null);
     setScreen(SCREENS.PROFILE_SELECT);
   }, []);
@@ -52,19 +60,24 @@ export function useGameState() {
     screen,
     currentProfile,
     currentPuzzle,
+    currentSudokuPuzzle,
+    selectedGame,
     lastResult,
     selectedProfileForPin,
     setCurrentPuzzle,
+    setCurrentSudokuPuzzle,
     setLastResult,
     goToSplash,
     goToProfileSelect,
     goToCreateProfile,
     goToPinEntry,
+    goToGameMenu,
     goToGame,
     goToResults,
     goToHistory,
-    loginProfile,
-    logout,
     goToWeeklyLeaderboard,
+    loginProfile,
+    selectGame,
+    logout,
   };
 }
