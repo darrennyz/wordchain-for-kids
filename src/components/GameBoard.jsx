@@ -138,8 +138,22 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
 
   function startPlaying() {
     const words = typeof puzzle.words === 'string' ? JSON.parse(puzzle.words) : puzzle.words;
-    setAvailableWords(shuffleArray(words));
-    setChain(new Array(words.length).fill(null));
+    const solution = typeof puzzle.solution === 'string' ? JSON.parse(puzzle.solution) : puzzle.solution;
+    // Pre-place the first word of the solution
+    const firstWord = solution[0];
+    // Remove only the first matching occurrence from the scrambled words
+    let removed = false;
+    const remainingWords = words.filter((w) => {
+      if (!removed && w.toUpperCase() === firstWord.toUpperCase()) {
+        removed = true;
+        return false;
+      }
+      return true;
+    });
+    setAvailableWords(shuffleArray(remainingWords));
+    const newChain = new Array(words.length).fill(null);
+    newChain[0] = firstWord; // Lock first word in place
+    setChain(newChain);
     setTimer(0);
     setCompleted(false);
     setPhase('playing');
@@ -155,9 +169,9 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
     return () => clearInterval(timerRef.current);
   }, [isRunning, completed]);
 
-  // Place a word into the next available chain slot
+  // Place a word into the next available chain slot (skip slot 0, it's locked)
   function placeWord(word) {
-    const nextSlot = chain.indexOf(null);
+    const nextSlot = chain.indexOf(null, 1); // Start searching from index 1
     if (nextSlot === -1) return;
     setChain((prev) => {
       const next = [...prev];
@@ -167,9 +181,10 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
     setAvailableWords((prev) => prev.filter((w) => w !== word));
   }
 
-  // Remove a word from the chain back to the bank
+  // Remove a word from the chain back to the bank (slot 0 is locked)
   function removeWord(slotIndex) {
     if (completed) return;
+    if (slotIndex === 0) return; // First word is locked
     const word = chain[slotIndex];
     if (!word) return;
     setChain((prev) => {
@@ -234,9 +249,12 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
 
   function clearChain() {
     if (completed) return;
-    const wordsInChain = chain.filter(Boolean);
+    // Keep the first word (locked), return everything else to the bank
+    const wordsInChain = chain.slice(1).filter(Boolean);
     setAvailableWords((prev) => [...prev, ...wordsInChain]);
-    setChain(new Array(chain.length).fill(null));
+    const newChain = new Array(chain.length).fill(null);
+    newChain[0] = chain[0]; // Keep first word locked
+    setChain(newChain);
   }
 
   // ─── LOADING ────────────────────────────────────────────────
@@ -373,7 +391,7 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
 
           <div className="bg-white rounded-2xl shadow-card p-5 mb-8 text-left max-w-xs mx-auto">
             <p className="text-snow-600 text-sm leading-relaxed mb-3">
-              Arrange <strong>7 words</strong> into a chain where each pair of neighbors forms a common phrase or compound word.
+              The first word is given. Arrange the remaining <strong>6 words</strong> to complete the chain where each pair forms a compound word.
             </p>
             <p className="text-snow-400 text-xs">
               The timer starts as soon as you begin!
@@ -445,33 +463,40 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
         {chain.map((word, i) => (
           <div key={i}>
             <div
-              onDragOver={(e) => !word && handleDragOver(e, i)}
+              onDragOver={(e) => !word && i !== 0 && handleDragOver(e, i)}
               onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, i)}
-              onClick={() => word && removeWord(i)}
+              onDrop={(e) => i !== 0 && handleDrop(e, i)}
+              onClick={() => word && i !== 0 && removeWord(i)}
               className={`drop-zone flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition-all duration-200 ${
-                word
-                  ? `bg-white border-snow-200 shadow-tile cursor-pointer hover:shadow-tile-active ${
-                      wrongPair === i || wrongPair === i - 1 ? 'animate-shake border-accent-red' : ''
-                    }`
-                  : `border-dashed border-snow-200 bg-snow-50/50 ${dragOverSlot === i ? 'drag-over' : ''}`
+                i === 0 && word
+                  ? 'bg-gradient-to-r from-blue-50 to-purple-50 border-blue-300 shadow-tile'
+                  : word
+                    ? `bg-white border-snow-200 shadow-tile cursor-pointer hover:shadow-tile-active ${
+                        wrongPair === i || wrongPair === i - 1 ? 'animate-shake border-accent-red' : ''
+                      }`
+                    : `border-dashed border-snow-200 bg-snow-50/50 ${dragOverSlot === i ? 'drag-over' : ''}`
               }`}
             >
               <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                word
-                  ? `${TILE_COLORS[i % TILE_COLORS.length].bg} ${TILE_COLORS[i % TILE_COLORS.length].text}`
-                  : 'bg-snow-100 text-snow-400'
+                i === 0 && word
+                  ? 'bg-blue-100 text-blue-700'
+                  : word
+                    ? `${TILE_COLORS[i % TILE_COLORS.length].bg} ${TILE_COLORS[i % TILE_COLORS.length].text}`
+                    : 'bg-snow-100 text-snow-400'
               }`}>
-                {i + 1}
+                {i === 0 ? '🔗' : i + 1}
               </div>
               {word ? (
-                <span className={`font-display font-bold text-base ${TILE_COLORS[i % TILE_COLORS.length].text}`}>
+                <span className={`font-display font-bold text-base ${i === 0 ? 'text-blue-700' : TILE_COLORS[i % TILE_COLORS.length].text}`}>
                   {word.toUpperCase()}
                 </span>
               ) : (
                 <span className="text-snow-300 text-sm">Drag or tap a word here</span>
               )}
-              {word && !completed && (
+              {i === 0 && word && (
+                <span className="ml-auto text-xs text-blue-400 font-medium flex-shrink-0">START</span>
+              )}
+              {word && i !== 0 && !completed && (
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="ml-auto text-snow-300 flex-shrink-0">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
