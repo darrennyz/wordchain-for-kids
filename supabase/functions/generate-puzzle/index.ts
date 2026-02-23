@@ -49,28 +49,55 @@ serve(async (req: Request) => {
 
     const prompt = `You are a puzzle generator for a kids' word chain game called "WordChain". The players are children aged 5-7.
 
-Generate a word chain puzzle with EXACTLY 7 words. Each adjacent pair of words must form a well-known English compound word, common phrase, or collocation that a young child would recognize.
+Generate a word chain puzzle with EXACTLY 7 words. Each adjacent pair of words in the solution must form a well-known English compound word, common phrase, or collocation that a young child would instantly recognize.
 
-Rules:
-- Use SIMPLE words that kids aged 5-7 would know
-- Each adjacent pair (word_i, word_{i+1}) must form a recognizable two-word phrase or compound
+CRITICAL RULES FOR WORD ORDER:
+- The pairing is DIRECTIONAL: word_i + word_{i+1} must form the phrase IN THAT ORDER.
+- "SAND + BOX" is valid because "sandbox" is a real word. "BOX + SAND" is INVALID because "boxsand" is not a word.
+- "SNOW + MAN" is valid because "snowman" is a real word. "MAN + SNOW" is INVALID because "mansnow" is not a word.
+- "SUN + FLOWER" is valid. "FLOWER + SUN" is INVALID.
+- Always verify: does word_i come FIRST in the compound/phrase? If not, reverse them or pick different words.
+
+OTHER RULES:
+- Use SIMPLE words that kids aged 5-7 would know and can read
 - Words should be 2-6 letters long
-- The chain must have EXACTLY ONE valid ordering
+- The chain must have EXACTLY ONE valid ordering (no ambiguous words that could pair multiple ways)
 - Avoid any inappropriate content
 - Focus on themes kids enjoy: animals, nature, food, colors, play, school
+- Every pair must be an OBVIOUS, well-known compound word or phrase — not a stretch
 
-Examples of good pairs: "rain + bow" (rainbow), "sun + flower" (sunflower), "cup + cake" (cupcake), "bed + time" (bedtime), "pop + corn" (popcorn)
+GOOD EXAMPLES (correct order):
+- "RAIN + BOW" → rainbow ✓
+- "BOW + TIE" → bow tie ✓
+- "CUP + CAKE" → cupcake ✓
+- "BED + TIME" → bedtime ✓
+- "POP + CORN" → popcorn ✓
+- "STAR + FISH" → starfish ✓
+- "SUN + FLOWER" → sunflower ✓
+- "SAND + BOX" → sandbox ✓
+- "SNOW + MAN" → snowman ✓
+- "FIRE + FLY" → firefly ✓
+- "BLUE + BERRY" → blueberry ✓
+- "TOOTH + BRUSH" → toothbrush ✓
+
+BAD EXAMPLES (wrong order — NEVER do this):
+- "BOX + SAND" ✗ (should be SAND + BOX)
+- "MAN + SNOW" ✗ (should be SNOW + MAN)
+- "CAKE + CUP" ✗ (should be CUP + CAKE)
+- "FISH + STAR" ✗ (should be STAR + FISH)
+
+Before finalizing, CHECK EVERY PAIR: read "word_i word_{i+1}" out loud. Does it sound like a real compound word or phrase that a 6-year-old would know? If not, fix it.
 
 Respond with ONLY valid JSON in this exact format, no other text:
 {
   "words": ["WORD1", "WORD2", "WORD3", "WORD4", "WORD5", "WORD6", "WORD7"],
   "solution": ["WORD1", "WORD2", "WORD3", "WORD4", "WORD5", "WORD6", "WORD7"],
-  "pair_explanations": ["word1+word2 explanation", "word2+word3 explanation", "word3+word4 explanation", "word4+word5 explanation", "word5+word6 explanation", "word6+word7 explanation"]
+  "pair_explanations": ["word1+word2 = compound/phrase", "word2+word3 = compound/phrase", "word3+word4 = compound/phrase", "word4+word5 = compound/phrase", "word5+word6 = compound/phrase", "word6+word7 = compound/phrase"]
 }
 
 The "words" array should be in SCRAMBLED order (not the solution order).
 The "solution" array should be the CORRECT chain order.
-The "pair_explanations" should briefly explain each adjacent pairing.`;
+The "pair_explanations" should name the compound word or phrase each pair forms.`;
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
