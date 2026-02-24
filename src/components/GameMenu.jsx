@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { hasCompletedToday, hasCompletedSudokuToday, getStreakForGame } from '../lib/supabase';
+import { hasCompletedToday, hasCompletedSudokuToday, hasCompletedPackingToday, getStreakForGame } from '../lib/supabase';
 import StreakTree from './StreakTree';
 
 export default function GameMenu({ profile, onSelectGame, onHistory, onLogout, onViewLeaderboard }) {
   const [wcDone, setWcDone] = useState(false);
   const [sudokuDone, setSudokuDone] = useState(false);
+  const [packingDone, setPackingDone] = useState(false);
   const [wcStreak, setWcStreak] = useState(0);
   const [sudokuStreak, setSudokuStreak] = useState(0);
+  const [packingStreak, setPackingStreak] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -15,16 +17,20 @@ export default function GameMenu({ profile, onSelectGame, onHistory, onLogout, o
 
   async function loadData() {
     try {
-      const [wc, su, wcs, sus] = await Promise.all([
+      const [wc, su, pk, wcs, sus, pks] = await Promise.all([
         hasCompletedToday(profile.id),
         hasCompletedSudokuToday(profile.id),
+        hasCompletedPackingToday(profile.id),
         getStreakForGame(profile.id, 'wordchain'),
         getStreakForGame(profile.id, 'sudoku'),
+        getStreakForGame(profile.id, 'packing'),
       ]);
       setWcDone(wc.completed);
       setSudokuDone(su.completed);
+      setPackingDone(pk.completed);
       setWcStreak(wcs);
       setSudokuStreak(sus);
+      setPackingStreak(pks);
     } catch (err) {
       console.error('Failed to load game menu data:', err);
     } finally {
@@ -147,6 +153,45 @@ export default function GameMenu({ profile, onSelectGame, onHistory, onLogout, o
               </div>
             ) : (
               <StreakTree streak={sudokuStreak} size={72} gameType="sudoku" showLabel={true} />
+            )}
+          </div>
+        </button>
+
+        {/* ── Puzzle Packing card ── */}
+        <button
+          onClick={() => onSelectGame('packing')}
+          className="flex flex-col bg-white rounded-2xl shadow-card hover:shadow-card-hover active:scale-[0.98] transition-all text-left overflow-hidden"
+        >
+          {/* Card top row */}
+          <div className="flex items-center gap-4 px-5 pt-5 pb-3">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-100 to-amber-100 flex items-center justify-center flex-shrink-0">
+              <span className="text-2xl">🧩</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="font-display font-bold text-base text-snow-800">Puzzle Packing</h2>
+              <p className="text-snow-400 text-xs mt-0.5">Fit the coloured pieces into the grid</p>
+            </div>
+            {!loading && (
+              packingDone ? (
+                <span className="px-2 py-1 bg-green-50 text-green-600 text-xs font-display font-semibold rounded-lg flex-shrink-0">
+                  Done ✓
+                </span>
+              ) : (
+                <span className="px-2 py-1 bg-orange-50 text-orange-500 text-xs font-display font-semibold rounded-lg flex-shrink-0">
+                  Play →
+                </span>
+              )
+            )}
+          </div>
+
+          {/* Streak tree section */}
+          <div className="border-t border-snow-100 px-5 py-3 flex items-center justify-center">
+            {loading ? (
+              <div className="h-16 flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-snow-200 border-t-orange-400 rounded-full animate-spin" />
+              </div>
+            ) : (
+              <StreakTree streak={packingStreak} size={72} gameType="packing" showLabel={true} />
             )}
           </div>
         </button>

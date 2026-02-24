@@ -7,6 +7,7 @@ import PinEntry from './PinEntry';
 import GameMenu from './GameMenu';
 import GameBoard from './GameBoard';
 import SudokuBoard from './SudokuBoard';
+import PackingBoard from './PackingBoard';
 import Results from './Results';
 import History from './History';
 import WeeklyLeaderboard from './WeeklyLeaderboard';
@@ -78,6 +79,24 @@ export default function App() {
             />
           );
         }
+        if (state.selectedGame === 'packing') {
+          return (
+            <PackingBoard
+              profile={state.currentProfile}
+              puzzle={state.currentPackingPuzzle}
+              setPuzzle={state.setCurrentPackingPuzzle}
+              timerState={state.packingTimerState}
+              setTimerState={state.setPackingTimerState}
+              onComplete={(result) => {
+                state.setPackingTimerState(null);
+                state.setLastResult(result);
+                state.goToResults();
+              }}
+              onLogout={state.logout}
+              onBack={state.goToGameMenu}
+            />
+          );
+        }
         return (
           <GameBoard
             profile={state.currentProfile}
@@ -99,7 +118,11 @@ export default function App() {
           <Results
             profile={state.currentProfile}
             result={state.lastResult}
-            puzzle={state.selectedGame === 'sudoku' ? state.currentSudokuPuzzle : state.currentPuzzle}
+            puzzle={
+              state.selectedGame === 'sudoku' ? state.currentSudokuPuzzle
+              : state.selectedGame === 'packing' ? state.currentPackingPuzzle
+              : state.currentPuzzle
+            }
             gameType={state.selectedGame}
             onHistory={state.goToHistory}
             onBack={state.goToGameMenu}

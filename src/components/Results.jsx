@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getTodaysLeaderboard, getTodaysSudokuLeaderboard, getProfileStats, getStreakForGame } from '../lib/supabase';
+import { getTodaysLeaderboard, getTodaysSudokuLeaderboard, getTodaysPackingLeaderboard, getProfileStats, getStreakForGame } from '../lib/supabase';
+import { PIECE_COLORS, COLS as PACKING_COLS } from '../lib/packingPuzzleGenerator';
 import StreakTree from './StreakTree';
 
 function formatTime(seconds) {
@@ -35,9 +36,10 @@ export default function Results({ profile, result, puzzle, gameType, onHistory, 
   const [countdown, setCountdown] = useState('');
 
   const isSudoku = gameType === 'sudoku';
-  const gameName = isSudoku ? 'Sudoku' : 'WordChain';
-  const gameEmoji = isSudoku ? '🔢' : '🔗';
-  const accentColor = isSudoku ? 'text-accent-green' : 'text-accent-blue';
+  const isPacking = gameType === 'packing';
+  const gameName = isPacking ? 'Puzzle Packing' : isSudoku ? 'Sudoku' : 'WordChain';
+  const gameEmoji = isPacking ? '🧩' : isSudoku ? '🔢' : '🔗';
+  const accentColor = isPacking ? 'text-orange-500' : isSudoku ? 'text-accent-green' : 'text-accent-blue';
 
   useEffect(() => {
     loadData();
@@ -58,7 +60,9 @@ export default function Results({ profile, result, puzzle, gameType, onHistory, 
 
   async function loadData() {
     try {
-      const leaderboardFn = isSudoku ? getTodaysSudokuLeaderboard : getTodaysLeaderboard;
+      const leaderboardFn = isPacking ? getTodaysPackingLeaderboard
+                          : isSudoku  ? getTodaysSudokuLeaderboard
+                          : getTodaysLeaderboard;
       const [lb, st, sk] = await Promise.all([
         puzzle ? leaderboardFn(puzzle.id) : Promise.resolve([]),
         getProfileStats(profile.id),
@@ -92,6 +96,13 @@ export default function Results({ profile, result, puzzle, gameType, onHistory, 
       ? JSON.parse(puzzle.grid)
       : puzzle.grid
     : [];
+
+  // Packing-specific data
+  const packingSolution = isPacking && puzzle?.solution
+    ? typeof puzzle.solution === 'string'
+      ? JSON.parse(puzzle.solution)
+      : puzzle.solution
+    : null;
 
   return (
     <div className="flex-1 flex flex-col px-6 py-6 overflow-y-auto animate-fade-in">
@@ -140,7 +151,7 @@ export default function Results({ profile, result, puzzle, gameType, onHistory, 
       {/* Streak tree card */}
       <div className="bg-white rounded-2xl shadow-card p-4 mb-4">
         <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-2 text-center">
-          {isSudoku ? 'Sudoku' : 'WordChain'} Streak
+          {gameName} Streak
         </p>
         <div className="flex items-center justify-center gap-6">
           <StreakTree streak={streak} size={88} gameType={gameType} showLabel={true} animate={true} />
@@ -268,6 +279,31 @@ export default function Results({ profile, result, puzzle, gameType, onHistory, 
         </div>
       )}
 
+      {/* Packing completed grid */}
+      {isPacking && packingSolution && (
+        <div className="bg-white rounded-2xl shadow-card p-4 mb-4">
+          <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-3 text-center">
+            Today's Solution
+          </p>
+          <div
+            className="mx-auto"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${PACKING_COLS}, 1fr)`,
+              gap: '3px',
+            }}
+          >
+            {packingSolution.flat().map((id, i) => (
+              <div
+                key={i}
+                className="aspect-square rounded"
+                style={{ backgroundColor: PIECE_COLORS[id] || '#e2e8f0' }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Leaderboard */}
       {leaderboard.length > 0 && (
         <div className="bg-white rounded-2xl shadow-card p-4 mb-4">
@@ -308,7 +344,7 @@ export default function Results({ profile, result, puzzle, gameType, onHistory, 
         </button>
         <button
           onClick={onBack}
-          className={`flex-1 py-3 ${isSudoku ? 'bg-accent-green hover:bg-green-600' : 'bg-accent-blue hover:bg-blue-600'} text-white font-display font-semibold text-sm rounded-xl active:scale-[0.98] transition-all`}
+          className={`flex-1 py-3 ${isPacking ? 'bg-orange-500 hover:bg-orange-600' : isSudoku ? 'bg-accent-green hover:bg-green-600' : 'bg-accent-blue hover:bg-blue-600'} text-white font-display font-semibold text-sm rounded-xl active:scale-[0.98] transition-all`}
         >
           Back to Games
         </button>

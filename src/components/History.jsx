@@ -13,6 +13,7 @@ export default function History({ profile, onBack, onLogout }) {
   const [stats, setStats] = useState(null);
   const [wcStreak, setWcStreak] = useState(0);
   const [sudokuStreak, setSudokuStreak] = useState(0);
+  const [packingStreak, setPackingStreak] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,16 +22,18 @@ export default function History({ profile, onBack, onLogout }) {
 
   async function loadHistory() {
     try {
-      const [res, st, wcs, sus] = await Promise.all([
+      const [res, st, wcs, sus, pks] = await Promise.all([
         getProfileAllResults(profile.id),
         getProfileStats(profile.id),
         getStreakForGame(profile.id, 'wordchain'),
         getStreakForGame(profile.id, 'sudoku'),
+        getStreakForGame(profile.id, 'packing'),
       ]);
       setResults(res);
       setStats(st);
       setWcStreak(wcs);
       setSudokuStreak(sus);
+      setPackingStreak(pks);
     } catch (err) {
       console.error('Failed to load history:', err);
     } finally {
@@ -111,16 +114,21 @@ export default function History({ profile, onBack, onLogout }) {
           <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-3 text-center">
             Current Streaks
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             {/* WordChain streak */}
-            <div className="bg-white rounded-2xl shadow-card p-4 flex flex-col items-center gap-1">
-              <p className="font-display font-semibold text-xs text-snow-500 mb-1">🔗 WordChain</p>
-              <StreakTree streak={wcStreak} size={72} gameType="wordchain" showLabel={true} />
+            <div className="bg-white rounded-2xl shadow-card p-3 flex flex-col items-center gap-1">
+              <p className="font-display font-semibold text-[10px] text-snow-500 mb-1">🔗 Chain</p>
+              <StreakTree streak={wcStreak} size={64} gameType="wordchain" showLabel={true} />
             </div>
             {/* Sudoku streak */}
-            <div className="bg-white rounded-2xl shadow-card p-4 flex flex-col items-center gap-1">
-              <p className="font-display font-semibold text-xs text-snow-500 mb-1">🔢 Sudoku</p>
-              <StreakTree streak={sudokuStreak} size={72} gameType="sudoku" showLabel={true} />
+            <div className="bg-white rounded-2xl shadow-card p-3 flex flex-col items-center gap-1">
+              <p className="font-display font-semibold text-[10px] text-snow-500 mb-1">🔢 Sudoku</p>
+              <StreakTree streak={sudokuStreak} size={64} gameType="sudoku" showLabel={true} />
+            </div>
+            {/* Packing streak */}
+            <div className="bg-white rounded-2xl shadow-card p-3 flex flex-col items-center gap-1">
+              <p className="font-display font-semibold text-[10px] text-snow-500 mb-1">🧩 Packing</p>
+              <StreakTree streak={packingStreak} size={64} gameType="packing" showLabel={true} />
             </div>
           </div>
         </div>
@@ -154,6 +162,7 @@ export default function History({ profile, onBack, onLogout }) {
                   });
               const puzzleNum = r.puzzle_number;
               const isWordchain = r.gameType === 'wordchain';
+              const isPacking = r.gameType === 'packing';
 
               return (
                 <div
@@ -163,7 +172,7 @@ export default function History({ profile, onBack, onLogout }) {
                 >
                   {/* Game type badge */}
                   <div className="flex-shrink-0 w-8 text-center text-lg">
-                    {isWordchain ? '🔗' : '🔢'}
+                    {isWordchain ? '🔗' : isPacking ? '🧩' : '🔢'}
                   </div>
 
                   {/* Date */}
@@ -183,7 +192,7 @@ export default function History({ profile, onBack, onLogout }) {
 
                   {/* Time */}
                   <div className="flex-1">
-                    <span className={`font-display font-bold text-lg tabular-nums ${isWordchain ? 'text-accent-blue' : 'text-accent-green'}`}>
+                    <span className={`font-display font-bold text-lg tabular-nums ${isWordchain ? 'text-accent-blue' : isPacking ? 'text-orange-500' : 'text-accent-green'}`}>
                       {formatTime(r.time_seconds)}
                     </span>
                   </div>

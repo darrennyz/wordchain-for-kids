@@ -19,7 +19,8 @@ export function useGameState() {
   const [currentProfile, setCurrentProfile] = useState(null);
   const [currentPuzzle, setCurrentPuzzle] = useState(null);
   const [currentSudokuPuzzle, setCurrentSudokuPuzzle] = useState(null);
-  const [selectedGame, setSelectedGame] = useState(null); // 'wordchain' | 'sudoku'
+  const [currentPackingPuzzle, setCurrentPackingPuzzle] = useState(null);
+  const [selectedGame, setSelectedGame] = useState(null); // 'wordchain' | 'sudoku' | 'packing'
   const [lastResult, setLastResult] = useState(null);
   const [selectedProfileForPin, setSelectedProfileForPin] = useState(null);
   // Persisted mid-game timer state — survives navigating back to the game menu
@@ -27,6 +28,7 @@ export function useGameState() {
   //        { puzzleDate, elapsedSeconds, grid }                  | null  (sudoku)
   const [wordchainTimerState, setWordchainTimerState] = useState(null);
   const [sudokuTimerState, setSudokuTimerState] = useState(null);
+  const [packingTimerState, setPackingTimerState] = useState(null);
 
   const goToSplash = useCallback(() => setScreen(SCREENS.SPLASH), []);
   const goToProfileSelect = useCallback(() => setScreen(SCREENS.PROFILE_SELECT), []);
@@ -56,10 +58,12 @@ export function useGameState() {
     setCurrentProfile(null);
     setCurrentPuzzle(null);
     setCurrentSudokuPuzzle(null);
+    setCurrentPackingPuzzle(null);
     setSelectedGame(null);
     setLastResult(null);
     setWordchainTimerState(null);
     setSudokuTimerState(null);
+    setPackingTimerState(null);
     setScreen(SCREENS.PROFILE_SELECT);
   }, []);
 
@@ -68,6 +72,7 @@ export function useGameState() {
     currentProfile,
     currentPuzzle,
     currentSudokuPuzzle,
+    currentPackingPuzzle,
     selectedGame,
     lastResult,
     selectedProfileForPin,
@@ -75,8 +80,11 @@ export function useGameState() {
     setWordchainTimerState,
     sudokuTimerState,
     setSudokuTimerState,
+    packingTimerState,
+    setPackingTimerState,
     setCurrentPuzzle,
     setCurrentSudokuPuzzle,
+    setCurrentPackingPuzzle,
     setLastResult,
     goToSplash,
     goToProfileSelect,

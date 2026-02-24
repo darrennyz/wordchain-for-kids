@@ -97,10 +97,16 @@ export default function StreakTree({ streak = 0, size = 80, gameType = 'wordchai
   const day = animate ? animDay : Math.min(Math.max(Math.floor(streak), 0), 30);
 
   // ── Colour palette ────────────────────────────────────────────────
-  // WordChain: blue-green tones; Sudoku: warm teal-green tones
-  const leafLight = gameType === 'sudoku' ? '#86efac' : '#6ee7b7'; // green-300 / emerald-300
-  const leafMid   = gameType === 'sudoku' ? '#22c55e' : '#10b981'; // green-500 / emerald-500
-  const leafDeep  = gameType === 'sudoku' ? '#15803d' : '#065f46'; // green-700 / emerald-800
+  // WordChain: emerald tones; Sudoku: green tones; Packing: orange/amber tones
+  const leafLight = gameType === 'packing' ? '#fed7aa'  // orange-200
+                  : gameType === 'sudoku'  ? '#86efac'  // green-300
+                  : '#6ee7b7';                           // emerald-300
+  const leafMid   = gameType === 'packing' ? '#f97316'  // orange-500
+                  : gameType === 'sudoku'  ? '#22c55e'  // green-500
+                  : '#10b981';                           // emerald-500
+  const leafDeep  = gameType === 'packing' ? '#c2410c'  // orange-700
+                  : gameType === 'sudoku'  ? '#15803d'  // green-700
+                  : '#065f46';                           // emerald-800
 
   const leafColor    = lerpColor(leafLight, leafDeep, phase(day, 4, 30));
   const leafColorMid = lerpColor(leafLight, leafMid,  phase(day, 6, 28));

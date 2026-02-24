@@ -222,11 +222,101 @@ export async function getSudokuProfileResults(profileId) {
   return data || [];
 }
 
+// ─── Packing Puzzle helpers ──────────────────────────────────────
+
+export async function getTodaysPackingPuzzle() {
+  const today = getTodayDateSGT();
+  const { data, error } = await supabase
+    .from('packing_puzzles')
+    .select('*')
+    .eq('puzzle_date', today)
+    .single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
+}
+
+export async function hasCompletedPackingToday(profileId) {
+  const today = getTodayDateSGT();
+  const { data: puzzle } = await supabase
+    .from('packing_puzzles')
+    .select('id')
+    .eq('puzzle_date', today)
+    .single();
+  if (!puzzle) return { completed: false, result: null };
+
+  const { data: result } = await supabase
+    .from('packing_results')
+    .select('*')
+    .eq('profile_id', profileId)
+    .eq('packing_puzzle_id', puzzle.id)
+    .single();
+
+  return { completed: !!result, result, puzzleId: puzzle.id };
+}
+
+export async function savePackingPuzzle(puzzleData) {
+  const { data, error } = await supabase
+    .from('packing_puzzles')
+    .upsert(
+      {
+        puzzle_date: puzzleData.puzzle_date,
+        pieces: puzzleData.pieces,
+        anchors: puzzleData.anchors,
+        anchor_positions: puzzleData.anchor_positions,
+        solution: puzzleData.solution,
+      },
+      { onConflict: 'puzzle_date' }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function savePackingResult(profileId, puzzleId, timeSeconds) {
+  const { data, error } = await supabase
+    .from('packing_results')
+    .upsert(
+      {
+        profile_id: profileId,
+        packing_puzzle_id: puzzleId,
+        time_seconds: timeSeconds,
+        completed_at: new Date().toISOString(),
+      },
+      { onConflict: 'profile_id,packing_puzzle_id' }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getTodaysPackingLeaderboard(puzzleId) {
+  const { data, error } = await supabase
+    .from('packing_results')
+    .select('time_seconds, profiles(name, avatar_emoji)')
+    .eq('packing_puzzle_id', puzzleId)
+    .order('time_seconds', { ascending: true })
+    .limit(10);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getPackingProfileResults(profileId) {
+  const { data, error } = await supabase
+    .from('packing_results')
+    .select('*, packing_puzzles(puzzle_date, puzzle_number)')
+    .eq('profile_id', profileId)
+    .order('completed_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
 // ─── Combined Stats & History ────────────────────────────────────
 
 export async function getProfileStats(profileId) {
-  // Fetch both WordChain and Sudoku results
-  const [wcRes, sudokuRes] = await Promise.all([
+  // Fetch WordChain, Sudoku, and Packing results
+  const [wcRes, sudokuRes, packingRes] = await Promise.all([
     supabase
       .from('results')
       .select('time_seconds, completed_at')
@@ -237,11 +327,17 @@ export async function getProfileStats(profileId) {
       .select('time_seconds, completed_at')
       .eq('profile_id', profileId)
       .order('completed_at', { ascending: false }),
+    supabase
+      .from('packing_results')
+      .select('time_seconds, completed_at')
+      .eq('profile_id', profileId)
+      .order('completed_at', { ascending: false }),
   ]);
 
   const wcResults = wcRes.data || [];
   const sudokuResults = sudokuRes.data || [];
-  const allResults = [...wcResults, ...sudokuResults].sort(
+  const packingResults = packingRes.data || [];
+  const allResults = [...wcResults, ...sudokuResults, ...packingResults].sort(
     (a, b) => new Date(b.completed_at) - new Date(a.completed_at)
   );
 
@@ -280,7 +376,9 @@ export async function getProfileStats(profileId) {
 
 // Returns the current consecutive-day streak for one specific game type (SGT timezone)
 export async function getStreakForGame(profileId, gameType) {
-  const table = gameType === 'sudoku' ? 'sudoku_results' : 'results';
+  const table = gameType === 'sudoku' ? 'sudoku_results'
+              : gameType === 'packing' ? 'packing_results'
+              : 'results';
   const { data, error } = await supabase
     .from(table)
     .select('completed_at')
@@ -314,7 +412,7 @@ export async function getStreakForGame(profileId, gameType) {
 }
 
 export async function getProfileAllResults(profileId) {
-  const [wcRes, sudokuRes] = await Promise.all([
+  const [wcRes, sudokuRes, packingRes] = await Promise.all([
     supabase
       .from('results')
       .select('id, time_seconds, completed_at, puzzles(puzzle_date, puzzle_number)')
@@ -322,6 +420,10 @@ export async function getProfileAllResults(profileId) {
     supabase
       .from('sudoku_results')
       .select('id, time_seconds, completed_at, sudoku_puzzles(puzzle_date, puzzle_number)')
+      .eq('profile_id', profileId),
+    supabase
+      .from('packing_results')
+      .select('id, time_seconds, completed_at, packing_puzzles(puzzle_date, puzzle_number)')
       .eq('profile_id', profileId),
   ]);
 
@@ -339,7 +441,14 @@ export async function getProfileAllResults(profileId) {
     puzzle_number: r.sudoku_puzzles?.puzzle_number,
   }));
 
-  return [...wcResults, ...sudokuResults].sort(
+  const packingResults = (packingRes.data || []).map((r) => ({
+    ...r,
+    gameType: 'packing',
+    puzzle_date: r.packing_puzzles?.puzzle_date,
+    puzzle_number: r.packing_puzzles?.puzzle_number,
+  }));
+
+  return [...wcResults, ...sudokuResults, ...packingResults].sort(
     (a, b) => new Date(b.completed_at) - new Date(a.completed_at)
   );
 }
@@ -367,20 +476,22 @@ export function getWeekBoundariesSGT() {
 export async function getWeeklyLeaderboard() {
   const { mondayDate, sundayDate, weekLabel } = getWeekBoundariesSGT();
 
-  // Get puzzle IDs for both games this week
-  const [wcPuzzles, sudokuPuzzles] = await Promise.all([
+  // Get puzzle IDs for all three games this week
+  const [wcPuzzles, sudokuPuzzles, packingPuzzles] = await Promise.all([
     supabase.from('puzzles').select('id').gte('puzzle_date', mondayDate).lte('puzzle_date', sundayDate),
     supabase.from('sudoku_puzzles').select('id').gte('puzzle_date', mondayDate).lte('puzzle_date', sundayDate),
+    supabase.from('packing_puzzles').select('id').gte('puzzle_date', mondayDate).lte('puzzle_date', sundayDate),
   ]);
 
   const wcIds = (wcPuzzles.data || []).map((p) => p.id);
   const sudokuIds = (sudokuPuzzles.data || []).map((p) => p.id);
+  const packingIds = (packingPuzzles.data || []).map((p) => p.id);
 
-  if (wcIds.length === 0 && sudokuIds.length === 0) {
+  if (wcIds.length === 0 && sudokuIds.length === 0 && packingIds.length === 0) {
     return { leaderboard: [], weekLabel };
   }
 
-  // Get results from both tables
+  // Get results from all three tables
   const promises = [];
   if (wcIds.length > 0) {
     promises.push(
@@ -396,9 +507,16 @@ export async function getWeeklyLeaderboard() {
   } else {
     promises.push(Promise.resolve({ data: [] }));
   }
+  if (packingIds.length > 0) {
+    promises.push(
+      supabase.from('packing_results').select('profile_id, time_seconds, profiles(name, avatar_emoji)').in('packing_puzzle_id', packingIds)
+    );
+  } else {
+    promises.push(Promise.resolve({ data: [] }));
+  }
 
-  const [wcResults, sudokuResults] = await Promise.all(promises);
-  const allResults = [...(wcResults.data || []), ...(sudokuResults.data || [])];
+  const [wcResults, sudokuResults, packingResults] = await Promise.all(promises);
+  const allResults = [...(wcResults.data || []), ...(sudokuResults.data || []), ...(packingResults.data || [])];
 
   if (allResults.length === 0) {
     return { leaderboard: [], weekLabel };
