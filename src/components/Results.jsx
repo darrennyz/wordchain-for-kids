@@ -143,7 +143,7 @@ export default function Results({ profile, result, puzzle, gameType, onHistory, 
           {isSudoku ? 'Sudoku' : 'WordChain'} Streak
         </p>
         <div className="flex items-center justify-center gap-6">
-          <StreakTree streak={streak} size={88} gameType={gameType} showLabel={true} />
+          <StreakTree streak={streak} size={88} gameType={gameType} showLabel={true} animate={true} />
           <div className="text-left">
             {streak === 0 && (
               <p className="font-display font-bold text-sm text-snow-500">Start your streak<br/>by playing tomorrow!</p>

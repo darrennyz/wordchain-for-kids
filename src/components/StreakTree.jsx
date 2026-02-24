@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // Linearly interpolates between a and b by t (0–1)
 function lerp(a, b, t) {
@@ -34,9 +34,67 @@ function lerpColor(hex1, hex2, t) {
  *   size      — rendered size in px (default 80)
  *   gameType  — 'wordchain' | 'sudoku' (affects leaf colour tint)
  *   showLabel — whether to render the "Day N" label below (default true)
+ *   animate   — when true, animates from streak-1 → streak with watering effect
  */
-export default function StreakTree({ streak = 0, size = 80, gameType = 'wordchain', showLabel = true }) {
-  const day = Math.min(Math.max(Math.floor(streak), 0), 30);
+export default function StreakTree({ streak = 0, size = 80, gameType = 'wordchain', showLabel = true, animate = false }) {
+  // animDay is a float 0–30; used for smooth interpolation when animating
+  const [animDay, setAnimDay] = useState(() => {
+    if (animate && streak >= 1) return Math.max(0, streak - 1);
+    return Math.min(Math.max(Math.floor(streak), 0), 30);
+  });
+  // waterPhase: 'none' | 'watering' | 'growing'
+  const [waterPhase, setWaterPhase] = useState('none');
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    if (!animate || streak <= 0) {
+      setAnimDay(Math.min(Math.max(Math.floor(streak), 0), 30));
+      return;
+    }
+
+    const prevDay = Math.max(0, streak - 1);
+    const nextDay = Math.min(30, streak);
+
+    // Reset to previous stage immediately
+    setAnimDay(prevDay);
+    setWaterPhase('none');
+
+    // Phase 1: start watering after 500ms
+    const t1 = setTimeout(() => {
+      setWaterPhase('watering');
+    }, 500);
+
+    // Phase 2: start growth at 1400ms while still showing water
+    const t2 = setTimeout(() => {
+      setWaterPhase('growing');
+      const startTime = performance.now();
+      const duration = 1100;
+
+      function step(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic: fast at start, slows to a stop
+        const eased = 1 - Math.pow(1 - progress, 3);
+        setAnimDay(prevDay + (nextDay - prevDay) * eased);
+        if (progress < 1) {
+          rafRef.current = requestAnimationFrame(step);
+        } else {
+          setAnimDay(nextDay);
+          setWaterPhase('none');
+        }
+      }
+      rafRef.current = requestAnimationFrame(step);
+    }, 1400);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [animate, streak]);
+
+  // ── Use animDay (float) for smooth rendering ──────────────────────────────
+  const day = animate ? animDay : Math.min(Math.max(Math.floor(streak), 0), 30);
 
   // ── Colour palette ────────────────────────────────────────────────
   // WordChain: blue-green tones; Sudoku: warm teal-green tones
@@ -88,20 +146,33 @@ export default function StreakTree({ streak = 0, size = 80, gameType = 'wordchai
   const leafScale  = phase(day, 1, 5);
 
   // ── Label ─────────────────────────────────────────────────────────
+  const labelDay = Math.round(day);
   let label, labelColor;
-  if (day === 0) {
+  if (labelDay === 0) {
     label = 'Plant a seed';
     labelColor = '#78716c';
-  } else if (day === 1) {
+  } else if (labelDay === 1) {
     label = 'Day 1 🌱';
     labelColor = '#15803d';
-  } else if (day < 30) {
-    label = `Day ${day} 🔥`;
-    labelColor = day >= 20 ? '#b45309' : '#16a34a';
+  } else if (labelDay < 30) {
+    label = `Day ${labelDay} 🔥`;
+    labelColor = labelDay >= 20 ? '#b45309' : '#16a34a';
   } else {
     label = 'Day 30 🌳';
     labelColor = '#065f46';
   }
+
+  // ── Water drop positions ──────────────────────────────────────────
+  const waterDrops = [
+    { x: cx - 10, dur: '0.65s', begin: '0s' },
+    { x: cx + 4,  dur: '0.7s',  begin: '0.18s' },
+    { x: cx - 18, dur: '0.6s',  begin: '0.35s' },
+    { x: cx + 14, dur: '0.65s', begin: '0.1s' },
+    { x: cx + 22, dur: '0.7s',  begin: '0.28s' },
+    { x: cx - 4,  dur: '0.6s',  begin: '0.45s' },
+  ];
+
+  const showDrops = waterPhase === 'watering' || waterPhase === 'growing';
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -290,13 +361,37 @@ export default function StreakTree({ streak = 0, size = 80, gameType = 'wordchai
         )}
 
         {/* ── Day 30 star / sparkle ── */}
-        {day === 30 && (
+        {day >= 30 && (
           <>
             <circle cx={cx - 28} cy={28} r={3} fill="#fbbf24" opacity="0.8" />
             <circle cx={cx + 28} cy={22} r={2} fill="#fbbf24" opacity="0.7" />
             <circle cx={cx}      cy={10} r={2.5} fill="#fef08a" opacity="0.9" />
           </>
         )}
+
+        {/* ── Water drops (watering animation) ── */}
+        {showDrops && waterDrops.map((drop, i) => (
+          <ellipse key={i} cx={drop.x} cy={6} rx={1.8} ry={2.8} fill="#60a5fa" opacity="0">
+            <animate
+              attributeName="cy"
+              values="6;72"
+              dur={drop.dur}
+              begin={drop.begin}
+              repeatCount="indefinite"
+              calcMode="spline"
+              keyTimes="0;1"
+              keySplines="0.4 0 0.6 1"
+            />
+            <animate
+              attributeName="opacity"
+              values="0;0.85;0.85;0"
+              keyTimes="0;0.1;0.7;1"
+              dur={drop.dur}
+              begin={drop.begin}
+              repeatCount="indefinite"
+            />
+          </ellipse>
+        ))}
       </svg>
 
       {/* Label */}
