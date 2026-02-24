@@ -41,7 +41,7 @@ const CELL_COLORS = [
   'bg-orange-50 text-orange-700 border-orange-200',
 ];
 
-export default function SudokuBoard({ profile, puzzle, setPuzzle, onComplete, onLogout, onBack }) {
+export default function SudokuBoard({ profile, puzzle, setPuzzle, timerState, setTimerState, onComplete, onLogout, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [phase, setPhase] = useState('loading'); // loading, already_done, ready, playing
@@ -57,12 +57,28 @@ export default function SudokuBoard({ profile, puzzle, setPuzzle, onComplete, on
   const timerRef = useRef(null);
   const countdownRef = useRef(null);
 
+  // Always-current snapshot used by the unmount cleanup to save progress
+  const snapshotRef = useRef({});
+  snapshotRef.current = { phase, completed, timer, grid, puzzleDate: puzzle?.puzzle_date };
+
+  // Save mid-game state when navigating away (component unmounts)
   useEffect(() => {
-    loadPuzzleAndCheck();
     return () => {
       clearInterval(timerRef.current);
       clearInterval(countdownRef.current);
+      const s = snapshotRef.current;
+      if (s.phase === 'playing' && !s.completed && setTimerState) {
+        setTimerState({
+          puzzleDate: s.puzzleDate,
+          elapsedSeconds: s.timer,
+          grid: s.grid,
+        });
+      }
     };
+  }, []);
+
+  useEffect(() => {
+    loadPuzzleAndCheck();
   }, []);
 
   async function loadPuzzleAndCheck() {
@@ -128,13 +144,24 @@ export default function SudokuBoard({ profile, puzzle, setPuzzle, onComplete, on
   }
 
   function startPlaying() {
-    const puzzleGrid = typeof puzzle.grid === 'string' ? JSON.parse(puzzle.grid) : puzzle.grid;
     const puzzleGivens = typeof puzzle.givens === 'string' ? JSON.parse(puzzle.givens) : puzzle.givens;
-    setGrid([...puzzleGrid]);
     setGivens(puzzleGivens);
     setSelectedCell(null);
-    setTimer(0);
     setCompleted(false);
+
+    // Restore saved mid-game state if it's for the same puzzle date
+    if (timerState && timerState.puzzleDate === puzzle.puzzle_date) {
+      setGrid([...timerState.grid]);
+      setTimer(timerState.elapsedSeconds);
+      setPhase('playing');
+      setIsRunning(true);
+      return;
+    }
+
+    // Fresh start
+    const puzzleGrid = typeof puzzle.grid === 'string' ? JSON.parse(puzzle.grid) : puzzle.grid;
+    setGrid([...puzzleGrid]);
+    setTimer(0);
     setPhase('playing');
     setIsRunning(true);
   }
@@ -293,10 +320,23 @@ export default function SudokuBoard({ profile, puzzle, setPuzzle, onComplete, on
           )}
 
           <div className="bg-white rounded-2xl shadow-card p-5 mb-8 text-left max-w-xs mx-auto">
-            <p className="text-snow-600 text-sm leading-relaxed mb-3">
-              Fill the 4×4 grid so every <strong>row</strong>, <strong>column</strong>, and <strong>2×2 box</strong> contains the numbers 1 through 4.
-            </p>
-            <p className="text-snow-400 text-xs">The timer starts as soon as you begin!</p>
+            {timerState && timerState.puzzleDate === puzzle?.puzzle_date ? (
+              <>
+                <p className="text-snow-600 text-sm leading-relaxed mb-2">
+                  Welcome back! Your progress has been saved.
+                </p>
+                <p className="text-accent-green text-sm font-display font-bold">
+                  ⏱ {formatTime(timerState.elapsedSeconds)} elapsed
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-snow-600 text-sm leading-relaxed mb-3">
+                  Fill the 4×4 grid so every <strong>row</strong>, <strong>column</strong>, and <strong>2×2 box</strong> contains the numbers 1 through 4.
+                </p>
+                <p className="text-snow-400 text-xs">The timer starts as soon as you begin!</p>
+              </>
+            )}
           </div>
 
           <button

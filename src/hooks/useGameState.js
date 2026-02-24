@@ -22,6 +22,11 @@ export function useGameState() {
   const [selectedGame, setSelectedGame] = useState(null); // 'wordchain' | 'sudoku'
   const [lastResult, setLastResult] = useState(null);
   const [selectedProfileForPin, setSelectedProfileForPin] = useState(null);
+  // Persisted mid-game timer state — survives navigating back to the game menu
+  // Shape: { puzzleDate, elapsedSeconds, chain, availableWords } | null  (wordchain)
+  //        { puzzleDate, elapsedSeconds, grid }                  | null  (sudoku)
+  const [wordchainTimerState, setWordchainTimerState] = useState(null);
+  const [sudokuTimerState, setSudokuTimerState] = useState(null);
 
   const goToSplash = useCallback(() => setScreen(SCREENS.SPLASH), []);
   const goToProfileSelect = useCallback(() => setScreen(SCREENS.PROFILE_SELECT), []);
@@ -53,6 +58,8 @@ export function useGameState() {
     setCurrentSudokuPuzzle(null);
     setSelectedGame(null);
     setLastResult(null);
+    setWordchainTimerState(null);
+    setSudokuTimerState(null);
     setScreen(SCREENS.PROFILE_SELECT);
   }, []);
 
@@ -64,6 +71,10 @@ export function useGameState() {
     selectedGame,
     lastResult,
     selectedProfileForPin,
+    wordchainTimerState,
+    setWordchainTimerState,
+    sudokuTimerState,
+    setSudokuTimerState,
     setCurrentPuzzle,
     setCurrentSudokuPuzzle,
     setLastResult,

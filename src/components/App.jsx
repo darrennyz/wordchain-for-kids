@@ -66,7 +66,10 @@ export default function App() {
               profile={state.currentProfile}
               puzzle={state.currentSudokuPuzzle}
               setPuzzle={state.setCurrentSudokuPuzzle}
+              timerState={state.sudokuTimerState}
+              setTimerState={state.setSudokuTimerState}
               onComplete={(result) => {
+                state.setSudokuTimerState(null);
                 state.setLastResult(result);
                 state.goToResults();
               }}
@@ -80,7 +83,10 @@ export default function App() {
             profile={state.currentProfile}
             puzzle={state.currentPuzzle}
             setPuzzle={state.setCurrentPuzzle}
+            timerState={state.wordchainTimerState}
+            setTimerState={state.setWordchainTimerState}
             onComplete={(result) => {
+              state.setWordchainTimerState(null);
               state.setLastResult(result);
               state.goToResults();
             }}

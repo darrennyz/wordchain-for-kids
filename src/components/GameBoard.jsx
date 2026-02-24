@@ -49,7 +49,7 @@ function formatCountdown(ms) {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLogout, onHistory, onBack }) {
+export default function GameBoard({ profile, puzzle, setPuzzle, timerState, setTimerState, onComplete, onLogout, onHistory, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [phase, setPhase] = useState('loading'); // loading, already_done, ready, playing
@@ -67,13 +67,30 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
   const timerRef = useRef(null);
   const countdownRef = useRef(null);
 
-  // Load puzzle and check completion
+  // Always-current snapshot used by the unmount cleanup to save progress
+  const snapshotRef = useRef({});
+  snapshotRef.current = { phase, completed, timer, chain, availableWords, puzzleDate: puzzle?.puzzle_date };
+
+  // Save mid-game state when navigating away (component unmounts)
   useEffect(() => {
-    loadPuzzleAndCheck();
     return () => {
       clearInterval(timerRef.current);
       clearInterval(countdownRef.current);
+      const s = snapshotRef.current;
+      if (s.phase === 'playing' && !s.completed && setTimerState) {
+        setTimerState({
+          puzzleDate: s.puzzleDate,
+          elapsedSeconds: s.timer,
+          chain: s.chain,
+          availableWords: s.availableWords,
+        });
+      }
     };
+  }, []);
+
+  // Load puzzle and check completion
+  useEffect(() => {
+    loadPuzzleAndCheck();
   }, []);
 
   async function loadPuzzleAndCheck() {
@@ -137,6 +154,18 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
   }
 
   function startPlaying() {
+    // Restore saved mid-game state if it's for the same puzzle date
+    if (timerState && timerState.puzzleDate === puzzle.puzzle_date) {
+      setChain(timerState.chain);
+      setAvailableWords(timerState.availableWords);
+      setTimer(timerState.elapsedSeconds);
+      setCompleted(false);
+      setPhase('playing');
+      setIsRunning(true);
+      return;
+    }
+
+    // Fresh start
     const words = typeof puzzle.words === 'string' ? JSON.parse(puzzle.words) : puzzle.words;
     const solution = typeof puzzle.solution === 'string' ? JSON.parse(puzzle.solution) : puzzle.solution;
     // Pre-place the first word of the solution
@@ -392,12 +421,25 @@ export default function GameBoard({ profile, puzzle, setPuzzle, onComplete, onLo
           )}
 
           <div className="bg-white rounded-2xl shadow-card p-5 mb-8 text-left max-w-xs mx-auto">
-            <p className="text-snow-600 text-sm leading-relaxed mb-3">
-              The first word is given. Arrange the remaining <strong>6 words</strong> to complete the chain where each pair forms a compound word.
-            </p>
-            <p className="text-snow-400 text-xs">
-              The timer starts as soon as you begin!
-            </p>
+            {timerState && timerState.puzzleDate === puzzle?.puzzle_date ? (
+              <>
+                <p className="text-snow-600 text-sm leading-relaxed mb-2">
+                  Welcome back! Your progress has been saved.
+                </p>
+                <p className="text-accent-blue text-sm font-display font-bold">
+                  ⏱ {formatTime(timerState.elapsedSeconds)} elapsed
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-snow-600 text-sm leading-relaxed mb-3">
+                  The first word is given. Arrange the remaining <strong>6 words</strong> to complete the chain where each pair forms a compound word.
+                </p>
+                <p className="text-snow-400 text-xs">
+                  The timer starts as soon as you begin!
+                </p>
+              </>
+            )}
           </div>
 
           <button
