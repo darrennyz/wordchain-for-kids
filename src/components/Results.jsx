@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getTodaysLeaderboard, getTodaysSudokuLeaderboard, getProfileStats } from '../lib/supabase';
+import { getTodaysLeaderboard, getTodaysSudokuLeaderboard, getProfileStats, getStreakForGame } from '../lib/supabase';
+import StreakTree from './StreakTree';
 
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60);
@@ -29,6 +30,7 @@ function formatCountdown(ms) {
 export default function Results({ profile, result, puzzle, gameType, onHistory, onBack }) {
   const [leaderboard, setLeaderboard] = useState([]);
   const [stats, setStats] = useState(null);
+  const [streak, setStreak] = useState(0);
   const [showConfetti, setShowConfetti] = useState(true);
   const [countdown, setCountdown] = useState('');
 
@@ -57,12 +59,14 @@ export default function Results({ profile, result, puzzle, gameType, onHistory, 
   async function loadData() {
     try {
       const leaderboardFn = isSudoku ? getTodaysSudokuLeaderboard : getTodaysLeaderboard;
-      const [lb, st] = await Promise.all([
-        puzzle ? leaderboardFn(puzzle.id) : [],
+      const [lb, st, sk] = await Promise.all([
+        puzzle ? leaderboardFn(puzzle.id) : Promise.resolve([]),
         getProfileStats(profile.id),
+        getStreakForGame(profile.id, gameType),
       ]);
       setLeaderboard(lb);
       setStats(st);
+      setStreak(sk);
     } catch (err) {
       console.error('Failed to load results data:', err);
     }
@@ -131,6 +135,36 @@ export default function Results({ profile, result, puzzle, gameType, onHistory, 
         <p className={`font-display text-4xl font-bold ${accentColor}`}>
           {formatTime(timeSeconds)}
         </p>
+      </div>
+
+      {/* Streak tree card */}
+      <div className="bg-white rounded-2xl shadow-card p-4 mb-4">
+        <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-2 text-center">
+          {isSudoku ? 'Sudoku' : 'WordChain'} Streak
+        </p>
+        <div className="flex items-center justify-center gap-6">
+          <StreakTree streak={streak} size={88} gameType={gameType} showLabel={true} />
+          <div className="text-left">
+            {streak === 0 && (
+              <p className="font-display font-bold text-sm text-snow-500">Start your streak<br/>by playing tomorrow!</p>
+            )}
+            {streak === 1 && (
+              <p className="font-display font-bold text-sm text-accent-green">Your streak<br/>has sprouted! 🌱</p>
+            )}
+            {streak > 1 && streak < 7 && (
+              <p className="font-display font-bold text-sm text-accent-green">{streak} days strong!<br/>Keep growing! 🌿</p>
+            )}
+            {streak >= 7 && streak < 14 && (
+              <p className="font-display font-bold text-sm text-green-700">{streak} day streak!<br/>You're on fire! 🔥</p>
+            )}
+            {streak >= 14 && streak < 30 && (
+              <p className="font-display font-bold text-sm text-green-800">{streak} days!<br/>Almost a full tree! 🌳</p>
+            )}
+            {streak >= 30 && (
+              <p className="font-display font-bold text-sm text-green-900">{streak} day streak!<br/>Full tree! 🌳✨</p>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Countdown to next puzzle */}

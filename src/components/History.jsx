@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getProfileAllResults, getProfileStats } from '../lib/supabase';
+import { getProfileAllResults, getProfileStats, getStreakForGame } from '../lib/supabase';
+import StreakTree from './StreakTree';
 
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60);
@@ -10,6 +11,8 @@ function formatTime(seconds) {
 export default function History({ profile, onBack, onLogout }) {
   const [results, setResults] = useState([]);
   const [stats, setStats] = useState(null);
+  const [wcStreak, setWcStreak] = useState(0);
+  const [sudokuStreak, setSudokuStreak] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,12 +21,16 @@ export default function History({ profile, onBack, onLogout }) {
 
   async function loadHistory() {
     try {
-      const [res, st] = await Promise.all([
+      const [res, st, wcs, sus] = await Promise.all([
         getProfileAllResults(profile.id),
         getProfileStats(profile.id),
+        getStreakForGame(profile.id, 'wordchain'),
+        getStreakForGame(profile.id, 'sudoku'),
       ]);
       setResults(res);
       setStats(st);
+      setWcStreak(wcs);
+      setSudokuStreak(sus);
     } catch (err) {
       console.error('Failed to load history:', err);
     } finally {
@@ -94,6 +101,27 @@ export default function History({ profile, onBack, onLogout }) {
             <p className="text-snow-400 text-[9px] font-medium uppercase tracking-wider">
               Avg
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Streak trees */}
+      {!loading && (
+        <div className="mb-5">
+          <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-3 text-center">
+            Current Streaks
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {/* WordChain streak */}
+            <div className="bg-white rounded-2xl shadow-card p-4 flex flex-col items-center gap-1">
+              <p className="font-display font-semibold text-xs text-snow-500 mb-1">🔗 WordChain</p>
+              <StreakTree streak={wcStreak} size={72} gameType="wordchain" showLabel={true} />
+            </div>
+            {/* Sudoku streak */}
+            <div className="bg-white rounded-2xl shadow-card p-4 flex flex-col items-center gap-1">
+              <p className="font-display font-semibold text-xs text-snow-500 mb-1">🔢 Sudoku</p>
+              <StreakTree streak={sudokuStreak} size={72} gameType="sudoku" showLabel={true} />
+            </div>
           </div>
         </div>
       )}

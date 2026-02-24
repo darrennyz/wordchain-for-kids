@@ -278,6 +278,41 @@ export async function getProfileStats(profileId) {
   return { totalPlayed: allResults.length, bestTime, avgTime, streak };
 }
 
+// Returns the current consecutive-day streak for one specific game type (SGT timezone)
+export async function getStreakForGame(profileId, gameType) {
+  const table = gameType === 'sudoku' ? 'sudoku_results' : 'results';
+  const { data, error } = await supabase
+    .from(table)
+    .select('completed_at')
+    .eq('profile_id', profileId)
+    .order('completed_at', { ascending: false });
+
+  if (error || !data || data.length === 0) return 0;
+
+  const sgtOffset = 8 * 60 * 60 * 1000;
+  // Build a Set of unique SGT date strings the player completed this game
+  const datesPlayed = new Set(
+    data.map((r) => {
+      const sgt = new Date(new Date(r.completed_at).getTime() + sgtOffset);
+      return sgt.toISOString().split('T')[0]; // 'YYYY-MM-DD'
+    })
+  );
+
+  // Count consecutive days backwards from today SGT
+  let streak = 0;
+  const nowMs = Date.now();
+  for (let i = 0; i < 365; i++) {
+    const dayMs = nowMs + sgtOffset - i * 24 * 60 * 60 * 1000;
+    const dateStr = new Date(dayMs).toISOString().split('T')[0];
+    if (datesPlayed.has(dateStr)) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
 export async function getProfileAllResults(profileId) {
   const [wcRes, sudokuRes] = await Promise.all([
     supabase
