@@ -219,7 +219,7 @@ export default function Results({ profile, result, puzzle, gameType, onHistory, 
       )}
 
       {/* WordChain solution chain */}
-      {!isSudoku && solution.length > 0 && (
+      {!isSudoku && !isPacking && solution.length > 0 && (
         <div className="bg-white rounded-2xl shadow-card p-4 mb-4">
           <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-3 text-center">
             Today's Chain
