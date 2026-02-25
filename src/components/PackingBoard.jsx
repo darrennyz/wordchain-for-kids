@@ -426,13 +426,20 @@ export default function PackingBoard({
         </div>
 
         {/* Streak */}
-        <div className="bg-white rounded-2xl shadow-card p-4 mb-4 flex items-center gap-4">
-          <StreakTree streak={streak} size={64} gameType="packing" showLabel={false} />
-          <div>
-            <p className="font-display font-bold text-3xl text-snow-800 leading-none">{streak}</p>
-            <p className="font-display text-sm text-snow-400 mt-0.5">
-              {streak === 0 ? 'Start your streak tomorrow!' : 'day streak 🔥'}
-            </p>
+        <div className="bg-white rounded-2xl shadow-card p-4 mb-4">
+          <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-2 text-center">
+            Packing Streak
+          </p>
+          <div className="flex items-center justify-center gap-6">
+            <StreakTree streak={streak} size={80} gameType="packing" showLabel={true} />
+            <div className="text-left">
+              {streak === 0 && <p className="font-display font-bold text-sm text-snow-500">Play tomorrow to<br/>start your streak!</p>}
+              {streak === 1 && <p className="font-display font-bold text-sm text-orange-500">Your streak<br/>has sprouted! 🌱</p>}
+              {streak > 1 && streak < 7 && <p className="font-display font-bold text-sm text-orange-500">{streak} days strong!<br/>Keep going! 🌿</p>}
+              {streak >= 7 && streak < 14 && <p className="font-display font-bold text-sm text-orange-600">{streak} day streak!<br/>You're on fire! 🔥</p>}
+              {streak >= 14 && streak < 30 && <p className="font-display font-bold text-sm text-orange-700">{streak} days!<br/>Almost a full tree! 🌳</p>}
+              {streak >= 30 && <p className="font-display font-bold text-sm text-orange-800">{streak} day streak!<br/>Full tree! 🌳✨</p>}
+            </div>
           </div>
         </div>
 
