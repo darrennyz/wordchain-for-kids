@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getTodaysPuzzle, generatePuzzleViaEdge, saveResult, hasCompletedToday } from '../lib/supabase';
+import { getTodaysPuzzle, generatePuzzleViaEdge, saveResult, hasCompletedToday, getStreakForGame } from '../lib/supabase';
+import StreakTree from './StreakTree';
 
 // Tile color palette for word tiles
 const TILE_COLORS = [
@@ -64,6 +65,7 @@ export default function GameBoard({ profile, puzzle, setPuzzle, timerState, setT
   const [countdown, setCountdown] = useState('');
   const [alreadyDoneResult, setAlreadyDoneResult] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
+  const [streak, setStreak] = useState(0);
   const timerRef = useRef(null);
   const countdownRef = useRef(null);
 
@@ -112,8 +114,9 @@ export default function GameBoard({ profile, puzzle, setPuzzle, timerState, setT
         setAlreadyDoneResult(result);
         setPhase('already_done');
         startCountdown();
-        // Load leaderboard
+        // Load leaderboard and streak
         loadLeaderboard(p.id);
+        getStreakForGame(profile.id, 'wordchain').then(setStreak).catch(console.error);
       } else {
         setPhase('ready');
       }
@@ -334,9 +337,20 @@ export default function GameBoard({ profile, puzzle, setPuzzle, timerState, setT
           <p className="text-snow-500 text-sm mb-2">
             You finished today's WordChain in
           </p>
-          <p className="font-display text-3xl font-bold text-accent-blue mb-8">
+          <p className="font-display text-3xl font-bold text-accent-blue mb-5">
             {alreadyDoneResult ? formatTime(alreadyDoneResult.time_seconds) : '--:--'}
           </p>
+
+          {/* Streak */}
+          <div className="bg-white rounded-2xl shadow-card p-4 w-full mb-4 flex items-center gap-4">
+            <StreakTree streak={streak} size={64} gameType="wordchain" showLabel={false} />
+            <div>
+              <p className="font-display font-bold text-3xl text-snow-800 leading-none">{streak}</p>
+              <p className="font-display text-sm text-snow-400 mt-0.5">
+                {streak === 0 ? 'Start your streak tomorrow!' : streak === 1 ? 'day streak 🔥' : 'day streak 🔥'}
+              </p>
+            </div>
+          </div>
 
           {/* Countdown to next puzzle */}
           <div className="bg-white rounded-2xl shadow-card p-5 w-full mb-6 text-center">

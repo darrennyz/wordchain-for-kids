@@ -13,7 +13,9 @@ import {
   savePackingResult,
   getTodaysPackingLeaderboard,
   getTodayDateSGT,
+  getStreakForGame,
 } from '../lib/supabase';
+import StreakTree from './StreakTree';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -104,10 +106,18 @@ export default function PackingBoard({
   const [alreadyDoneResult, setAlreadyDoneResult] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [countdown, setCountdown] = useState('');
+  const [streak, setStreak] = useState(0);
+  // dragging: null | { pieceId, orientationIdx, clientX, clientY }
+  const [dragging, setDragging] = useState(null);
 
   const timerIntervalRef = useRef(null);
   const countdownIntervalRef = useRef(null);
   const snapshotRef = useRef({});
+  const boardRef = useRef(null);
+  // Stable ref so pointer-event handlers always see latest state without re-binding
+  const stateRef = useRef({});
+  // anchors are computed below via useMemo, so we update stateRef after render in a separate effect
+  stateRef.current = { boardState, selectedPieceId, orientationIdx, dragging, puzzle };
 
   // snapshotRef: always holds the latest render values so unmount cleanup reads current state
   snapshotRef.current = { phase, timer, boardState, puzzleDate: puzzle?.puzzle_date };
@@ -153,6 +163,7 @@ export default function PackingBoard({
         if (p?.id) {
           getTodaysPackingLeaderboard(p.id).then(setLeaderboard).catch(console.error);
         }
+        getStreakForGame(profile.id, 'packing').then(setStreak).catch(console.error);
         startCountdown();
       } else {
         setPhase('ready');
@@ -221,53 +232,92 @@ export default function PackingBoard({
     // Timer intentionally NOT reset
   }
 
-  // ─── Cell interaction ────────────────────────────────────────
+  // ─── Drag helpers ─────────────────────────────────────────────
 
-  function handleCellClick(r, c) {
-    if (!boardState || !puzzle) return;
-    const anchors = getParsed('anchors') || [];
-    const cell = boardState[r][c];
+  /** Returns [row, col] for a client point, or null if outside the board */
+  function getCellFromClient(clientX, clientY) {
+    const board = boardRef.current;
+    if (!board) return null;
+    const rect = board.getBoundingClientRect();
+    const cellW = rect.width / COLS;
+    const cellH = rect.height / ROWS;
+    const col = Math.floor((clientX - rect.left) / cellW);
+    const row = Math.floor((clientY - rect.top) / cellH);
+    if (col >= 0 && col < COLS && row >= 0 && row < ROWS) return [row, col];
+    return null;
+  }
 
-    // Anchor cell: locked
-    if (anchors.includes(cell)) return;
-
-    if (!selectedPieceId) {
-      // No piece selected: tap a placed piece to remove it
-      if (cell) {
-        const newBoard = boardState.map((row) => [...row]);
-        for (let pr = 0; pr < ROWS; pr++) {
-          for (let pc = 0; pc < COLS; pc++) {
-            if (newBoard[pr][pc] === cell) newBoard[pr][pc] = '';
-          }
-        }
-        setBoardState(newBoard);
-      }
-      return;
-    }
-
-    // A piece is selected: try to place it with [0,0] at (r, c)
-    const orientation = ALL_ORIENTATIONS[selectedPieceId][orientationIdx];
+  /** Attempt to place the current selected piece (or dragging piece) at (r, c) */
+  function attemptPlace(r, c, pieceId, oIdx, board, curTimer) {
+    if (!board || !puzzle) return false;
+    const anchorList = getParsed('anchors') || [];
+    const orientation = ALL_ORIENTATIONS[pieceId][oIdx];
     const placed = orientation.map(([dr, dc]) => [r + dr, c + dc]);
-
     const valid = placed.every(
       ([pr, pc]) =>
-        pr >= 0 && pr < ROWS && pc >= 0 && pc < COLS && boardState[pr][pc] === ''
+        pr >= 0 && pr < ROWS && pc >= 0 && pc < COLS && board[pr][pc] === ''
     );
-    if (!valid) return;
-
-    const newBoard = boardState.map((row) => [...row]);
-    for (const [pr, pc] of placed) newBoard[pr][pc] = selectedPieceId;
-
+    if (!valid) return false;
+    const newBoard = board.map((row) => [...row]);
+    for (const [pr, pc] of placed) newBoard[pr][pc] = pieceId;
     setBoardState(newBoard);
     setSelectedPieceId(null);
     setOrientationIdx(0);
     setHoveredCell(null);
-
-    // Check completion: all cells filled
     if (newBoard.every((row) => row.every((id) => id !== ''))) {
       clearInterval(timerIntervalRef.current);
-      handleComplete(timer);
+      handleComplete(curTimer);
     }
+    return true;
+  }
+
+  // ─── Drag: pointer events on piece tray buttons ──────────────
+
+  function handlePiecePointerDown(e, id) {
+    e.preventDefault();
+    // Capture pointer so we keep receiving events even when finger moves off the element
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+    setSelectedPieceId(id);
+    setOrientationIdx(0);
+    const cell = getCellFromClient(e.clientX, e.clientY);
+    setHoveredCell(cell);
+    setDragging({ pieceId: id, orientationIdx: 0, clientX: e.clientX, clientY: e.clientY });
+  }
+
+  function handlePiecePointerMove(e, id) {
+    if (!dragging || dragging.pieceId !== id) return;
+    e.preventDefault();
+    const cell = getCellFromClient(e.clientX, e.clientY);
+    setHoveredCell(cell);
+    setDragging((d) => d ? { ...d, clientX: e.clientX, clientY: e.clientY } : null);
+  }
+
+  function handlePiecePointerUp(e, id) {
+    if (!dragging || dragging.pieceId !== id) return;
+    e.preventDefault();
+    const cell = getCellFromClient(e.clientX, e.clientY);
+    setDragging(null);
+    if (cell) {
+      const s = stateRef.current;
+      attemptPlace(cell[0], cell[1], id, s.orientationIdx, s.boardState, timer);
+    }
+  }
+
+  // ─── Board cell click (tap a placed non-anchor piece to remove) ──
+
+  function handleCellClick(r, c) {
+    if (!boardState || !puzzle) return;
+    const anchorList = getParsed('anchors') || [];
+    const cell = boardState[r][c];
+    if (!cell || anchorList.includes(cell)) return;
+    // Remove the whole piece from the board
+    const newBoard = boardState.map((row) => [...row]);
+    for (let pr = 0; pr < ROWS; pr++) {
+      for (let pc = 0; pc < COLS; pc++) {
+        if (newBoard[pr][pc] === cell) newBoard[pr][pc] = '';
+      }
+    }
+    setBoardState(newBoard);
   }
 
   async function handleComplete(finalTime) {
@@ -306,10 +356,14 @@ export default function PackingBoard({
     [nonAnchorPieces, placedNonAnchorIds]
   );
 
+  // ghostInfo uses the dragging piece if dragging, else the selected piece
+  const activePieceId = dragging?.pieceId ?? selectedPieceId;
+  const activeOrientIdx = dragging ? dragging.orientationIdx : orientationIdx;
+
   const ghostInfo = useMemo(() => {
-    if (!hoveredCell || !selectedPieceId || !boardState) return null;
+    if (!hoveredCell || !activePieceId || !boardState) return null;
     const [r, c] = hoveredCell;
-    const orientation = ALL_ORIENTATIONS[selectedPieceId][orientationIdx];
+    const orientation = ALL_ORIENTATIONS[activePieceId][activeOrientIdx];
     const placed = orientation.map(([dr, dc]) => [r + dr, c + dc]);
     const valid = placed.every(
       ([pr, pc]) =>
@@ -319,7 +373,7 @@ export default function PackingBoard({
       cells: new Set(placed.map(([pr, pc]) => `${pr},${pc}`)),
       valid,
     };
-  }, [hoveredCell, selectedPieceId, orientationIdx, boardState]);
+  }, [hoveredCell, activePieceId, activeOrientIdx, boardState]);
 
   // ─── Render: loading ─────────────────────────────────────────
 
@@ -358,7 +412,7 @@ export default function PackingBoard({
         </div>
 
         {/* Done header */}
-        <div className="text-center mb-5">
+        <div className="text-center mb-4">
           <div className="text-5xl mb-2">✅</div>
           <h1 className="font-display text-xl font-bold text-snow-800">Already packed today!</h1>
           <p className="text-snow-500 text-sm mt-1">
@@ -369,6 +423,17 @@ export default function PackingBoard({
                 : '--:--'}
             </span>
           </p>
+        </div>
+
+        {/* Streak */}
+        <div className="bg-white rounded-2xl shadow-card p-4 mb-4 flex items-center gap-4">
+          <StreakTree streak={streak} size={64} gameType="packing" showLabel={false} />
+          <div>
+            <p className="font-display font-bold text-3xl text-snow-800 leading-none">{streak}</p>
+            <p className="font-display text-sm text-snow-400 mt-0.5">
+              {streak === 0 ? 'Start your streak tomorrow!' : 'day streak 🔥'}
+            </p>
+          </div>
         </div>
 
         {/* Solution grid */}
@@ -568,6 +633,7 @@ export default function PackingBoard({
   // ─── Render: playing ─────────────────────────────────────────
 
   const allPlaced = trayPieces.length === 0;
+  const isDragging = !!dragging;
 
   return (
     <div className="flex-1 flex flex-col px-3 py-3 overflow-hidden animate-fade-in">
@@ -599,13 +665,14 @@ export default function PackingBoard({
 
       {/* Board */}
       <div
+        ref={boardRef}
         className="mx-auto w-full mb-2"
         style={{
           display: 'grid',
           gridTemplateColumns: `repeat(${COLS}, 1fr)`,
           gap: '3px',
         }}
-        onPointerLeave={() => setHoveredCell(null)}
+        onPointerLeave={() => { if (!isDragging) setHoveredCell(null); }}
       >
         {boardState?.flat().map((cell, idx) => {
           const r = Math.floor(idx / COLS);
@@ -619,7 +686,7 @@ export default function PackingBoard({
           if (cell) {
             bgColor = PIECE_COLORS[cell] || '#94a3b8';
           } else if (isGhost) {
-            bgColor = PIECE_COLORS[selectedPieceId] || '#94a3b8';
+            bgColor = PIECE_COLORS[activePieceId] || '#94a3b8';
           }
 
           return (
@@ -634,11 +701,10 @@ export default function PackingBoard({
                   ? '2.5px solid rgba(0,0,0,0.22)'
                   : '2px solid rgba(0,0,0,0.05)',
                 boxSizing: 'border-box',
-                cursor: isAnchor ? 'default' : 'pointer',
+                cursor: isAnchor ? 'default' : (cell && !isAnchor ? 'pointer' : 'default'),
                 transition: 'opacity 0.1s',
               }}
               onClick={() => handleCellClick(r, c)}
-              onPointerEnter={() => !isAnchor && setHoveredCell([r, c])}
             />
           );
         })}
@@ -649,35 +715,37 @@ export default function PackingBoard({
         <p className="text-snow-400 text-[10px] font-medium uppercase tracking-wider mb-2 text-center">
           {allPlaced
             ? '🎉 All pieces placed!'
+            : isDragging
+            ? 'Drop piece onto the grid ↑'
             : `Pieces · ${trayPieces.length} remaining`}
         </p>
 
-        {/* Piece buttons */}
+        {/* Piece buttons — drag to place */}
         <div className="flex flex-wrap gap-2 justify-center items-center flex-1">
           {trayPieces.map((id) => {
-            const isSelected = selectedPieceId === id;
-            const orientCells = isSelected
-              ? ALL_ORIENTATIONS[id][orientationIdx]
-              : ALL_ORIENTATIONS[id][0];
+            const isActive = activePieceId === id;
+            const oIdx = isActive ? activeOrientIdx : 0;
+            const orientCells = ALL_ORIENTATIONS[id][oIdx];
+            const isBeingDragged = dragging?.pieceId === id;
             return (
               <button
                 key={id}
-                onClick={() => {
-                  if (selectedPieceId === id) {
-                    setSelectedPieceId(null);
-                    setOrientationIdx(0);
-                  } else {
-                    setSelectedPieceId(id);
-                    setOrientationIdx(0);
-                  }
+                onPointerDown={(e) => handlePiecePointerDown(e, id)}
+                onPointerMove={(e) => handlePiecePointerMove(e, id)}
+                onPointerUp={(e) => handlePiecePointerUp(e, id)}
+                onPointerCancel={() => setDragging(null)}
+                style={{
+                  touchAction: 'none',
+                  opacity: isBeingDragged ? 0.35 : 1,
+                  cursor: 'grab',
                 }}
-                className={`p-2 rounded-xl border-2 transition-all active:scale-95 ${
-                  isSelected
-                    ? 'border-orange-400 bg-orange-50 shadow-md scale-[1.08]'
+                className={`p-2 rounded-xl border-2 transition-colors select-none ${
+                  isActive
+                    ? 'border-orange-400 bg-orange-50 shadow-md'
                     : 'border-snow-200 bg-snow-50 hover:border-snow-300'
                 }`}
               >
-                <PieceMini pieceId={id} orientationCells={orientCells} selected={isSelected} />
+                <PieceMini pieceId={id} orientationCells={orientCells} selected={isActive} />
               </button>
             );
           })}
@@ -695,13 +763,13 @@ export default function PackingBoard({
             ))}
         </div>
 
-        {/* Controls for selected piece */}
-        {selectedPieceId && (
+        {/* Controls: rotate + deselect (shown when a piece is selected but not mid-drag) */}
+        {selectedPieceId && !isDragging && (
           <div className="mt-2 flex gap-2">
             <button
               onClick={() => {
                 const n = ALL_ORIENTATIONS[selectedPieceId].length;
-                setOrientationIdx((idx) => (idx + 1) % n);
+                setOrientationIdx((i) => (i + 1) % n);
               }}
               className="flex-1 py-2 bg-orange-500 hover:bg-orange-600 text-white font-display font-semibold text-sm rounded-xl active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
             >
@@ -712,10 +780,7 @@ export default function PackingBoard({
               Rotate
             </button>
             <button
-              onClick={() => {
-                setSelectedPieceId(null);
-                setOrientationIdx(0);
-              }}
+              onClick={() => { setSelectedPieceId(null); setOrientationIdx(0); }}
               className="px-4 py-2 bg-snow-100 hover:bg-snow-200 text-snow-600 font-display font-semibold text-sm rounded-xl active:scale-[0.98] transition-all"
             >
               ✕
@@ -723,6 +788,28 @@ export default function PackingBoard({
           </div>
         )}
       </div>
+
+      {/* Floating piece preview during drag */}
+      {dragging && (
+        <div
+          style={{
+            position: 'fixed',
+            left: dragging.clientX + 8,
+            top: dragging.clientY + 8,
+            pointerEvents: 'none',
+            zIndex: 9999,
+            opacity: 0.85,
+            transform: 'scale(1.15)',
+            transformOrigin: 'top left',
+          }}
+        >
+          <PieceMini
+            pieceId={dragging.pieceId}
+            orientationCells={ALL_ORIENTATIONS[dragging.pieceId][dragging.orientationIdx]}
+            selected={true}
+          />
+        </div>
+      )}
     </div>
   );
 }

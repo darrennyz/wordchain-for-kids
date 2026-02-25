@@ -106,14 +106,22 @@ export default function GameMenu({ profile, onSelectGame, onHistory, onLogout, o
             )}
           </div>
 
-          {/* Streak tree section */}
-          <div className="border-t border-snow-100 px-5 py-3 flex items-center justify-center">
+          {/* Streak section */}
+          <div className="border-t border-snow-100 px-5 py-3 flex items-center gap-4">
             {loading ? (
-              <div className="h-16 flex items-center justify-center">
+              <div className="h-16 flex items-center justify-center w-full">
                 <div className="w-5 h-5 border-2 border-snow-200 border-t-accent-blue rounded-full animate-spin" />
               </div>
             ) : (
-              <StreakTree streak={wcStreak} size={72} gameType="wordchain" showLabel={true} />
+              <>
+                <StreakTree streak={wcStreak} size={56} gameType="wordchain" showLabel={false} />
+                <div>
+                  <p className="font-display font-bold text-2xl text-snow-800 leading-none">{wcStreak}</p>
+                  <p className="font-display text-xs text-snow-400 mt-0.5">
+                    {wcStreak === 1 ? 'day streak 🔥' : wcStreak === 0 ? 'start your streak!' : 'day streak 🔥'}
+                  </p>
+                </div>
+              </>
             )}
           </div>
         </button>
@@ -145,14 +153,22 @@ export default function GameMenu({ profile, onSelectGame, onHistory, onLogout, o
             )}
           </div>
 
-          {/* Streak tree section */}
-          <div className="border-t border-snow-100 px-5 py-3 flex items-center justify-center">
+          {/* Streak section */}
+          <div className="border-t border-snow-100 px-5 py-3 flex items-center gap-4">
             {loading ? (
-              <div className="h-16 flex items-center justify-center">
+              <div className="h-16 flex items-center justify-center w-full">
                 <div className="w-5 h-5 border-2 border-snow-200 border-t-accent-green rounded-full animate-spin" />
               </div>
             ) : (
-              <StreakTree streak={sudokuStreak} size={72} gameType="sudoku" showLabel={true} />
+              <>
+                <StreakTree streak={sudokuStreak} size={56} gameType="sudoku" showLabel={false} />
+                <div>
+                  <p className="font-display font-bold text-2xl text-snow-800 leading-none">{sudokuStreak}</p>
+                  <p className="font-display text-xs text-snow-400 mt-0.5">
+                    {sudokuStreak === 0 ? 'start your streak!' : 'day streak 🔥'}
+                  </p>
+                </div>
+              </>
             )}
           </div>
         </button>
@@ -184,14 +200,22 @@ export default function GameMenu({ profile, onSelectGame, onHistory, onLogout, o
             )}
           </div>
 
-          {/* Streak tree section */}
-          <div className="border-t border-snow-100 px-5 py-3 flex items-center justify-center">
+          {/* Streak section */}
+          <div className="border-t border-snow-100 px-5 py-3 flex items-center gap-4">
             {loading ? (
-              <div className="h-16 flex items-center justify-center">
+              <div className="h-16 flex items-center justify-center w-full">
                 <div className="w-5 h-5 border-2 border-snow-200 border-t-orange-400 rounded-full animate-spin" />
               </div>
             ) : (
-              <StreakTree streak={packingStreak} size={72} gameType="packing" showLabel={true} />
+              <>
+                <StreakTree streak={packingStreak} size={56} gameType="packing" showLabel={false} />
+                <div>
+                  <p className="font-display font-bold text-2xl text-snow-800 leading-none">{packingStreak}</p>
+                  <p className="font-display text-xs text-snow-400 mt-0.5">
+                    {packingStreak === 0 ? 'start your streak!' : 'day streak 🔥'}
+                  </p>
+                </div>
+              </>
             )}
           </div>
         </button>

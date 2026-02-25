@@ -6,8 +6,10 @@ import {
   saveSudokuPuzzle,
   getTodaysSudokuLeaderboard,
   getTodayDateSGT,
+  getStreakForGame,
 } from '../lib/supabase';
 import { generateSudokuForDate, isSudokuComplete, hasCellConflict } from '../lib/sudokuGenerator';
+import StreakTree from './StreakTree';
 
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60);
@@ -54,6 +56,7 @@ export default function SudokuBoard({ profile, puzzle, setPuzzle, timerState, se
   const [countdown, setCountdown] = useState('');
   const [alreadyDoneResult, setAlreadyDoneResult] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
+  const [streak, setStreak] = useState(0);
   const timerRef = useRef(null);
   const countdownRef = useRef(null);
 
@@ -110,6 +113,7 @@ export default function SudokuBoard({ profile, puzzle, setPuzzle, timerState, se
         setPhase('already_done');
         startCountdown();
         if (p.id) loadLeaderboard(p.id);
+        getStreakForGame(profile.id, 'sudoku').then(setStreak).catch(console.error);
       } else {
         setPhase('ready');
       }
@@ -258,9 +262,20 @@ export default function SudokuBoard({ profile, puzzle, setPuzzle, timerState, se
           <div className="text-5xl mb-4">✅</div>
           <h1 className="font-display text-xl font-bold text-snow-800 mb-2">Sudoku Complete!</h1>
           <p className="text-snow-500 text-sm mb-2">You finished today's Sudoku in</p>
-          <p className="font-display text-3xl font-bold text-accent-green mb-8">
+          <p className="font-display text-3xl font-bold text-accent-green mb-5">
             {alreadyDoneResult ? formatTime(alreadyDoneResult.time_seconds) : '--:--'}
           </p>
+
+          {/* Streak */}
+          <div className="bg-white rounded-2xl shadow-card p-4 w-full mb-4 flex items-center gap-4">
+            <StreakTree streak={streak} size={64} gameType="sudoku" showLabel={false} />
+            <div>
+              <p className="font-display font-bold text-3xl text-snow-800 leading-none">{streak}</p>
+              <p className="font-display text-sm text-snow-400 mt-0.5">
+                {streak === 0 ? 'Start your streak tomorrow!' : 'day streak 🔥'}
+              </p>
+            </div>
+          </div>
 
           <div className="bg-white rounded-2xl shadow-card p-5 w-full mb-6 text-center">
             <p className="text-snow-400 text-xs font-medium uppercase tracking-wider mb-2">Next puzzle in</p>
