@@ -271,6 +271,28 @@ export default function PackingBoard({
     return true;
   }
 
+  // ─── Flip: mirror current orientation horizontally ───────────
+
+  function handleFlip() {
+    if (!selectedPieceId) return;
+    const orientations = ALL_ORIENTATIONS[selectedPieceId];
+    const currentCells = orientations[orientationIdx];
+    // Compute horizontally mirrored cells
+    const maxC = Math.max(...currentCells.map(([, c]) => c));
+    const flipped = currentCells
+      .map(([r, c]) => [r, maxC - c])
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const flipKey = flipped.map(([r, c]) => `${r},${c}`).join('|');
+    // Find the matching orientation index
+    const matchIdx = orientations.findIndex((cells) => {
+      const key = cells.map(([r, c]) => `${r},${c}`).join('|');
+      return key === flipKey;
+    });
+    if (matchIdx !== -1 && matchIdx !== orientationIdx) {
+      setOrientationIdx(matchIdx);
+    }
+  }
+
   // ─── Drag: pointer events on piece tray buttons ──────────────
 
   function handlePiecePointerDown(e, id) {
@@ -791,6 +813,18 @@ export default function PackingBoard({
                 <path d="M20.49 15a9 9 0 1 1-.49-8.14" />
               </svg>
               Rotate
+            </button>
+            <button
+              onClick={handleFlip}
+              className="flex-1 py-2 bg-orange-500 hover:bg-orange-600 text-white font-display font-semibold text-sm rounded-xl active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 3l4 4-4 4" />
+                <path d="M21 7H9a4 4 0 0 0 0 8h1" />
+                <path d="M7 21l-4-4 4-4" />
+                <path d="M3 17h12a4 4 0 0 0 0-8h-1" />
+              </svg>
+              Flip
             </button>
             <button
               onClick={() => { setSelectedPieceId(null); setOrientationIdx(0); }}
