@@ -39,7 +39,7 @@ export default function GameMenu({ profile, onSelectGame, onHistory, onLogout, o
   }
 
   return (
-    <div className="flex-1 flex flex-col px-6 py-6 animate-fade-in overflow-hidden">
+    <div className="flex-1 flex flex-col px-6 py-6 animate-fade-in overflow-y-auto">
       {/* Top bar */}
       <div className="flex items-center justify-between mb-5">
         <button
@@ -77,7 +77,7 @@ export default function GameMenu({ profile, onSelectGame, onHistory, onLogout, o
       </div>
 
       {/* Game cards */}
-      <div className="flex-1 flex flex-col gap-4 overflow-y-auto">
+      <div className="flex flex-col gap-4">
 
         {/* ── WordChain card ── */}
         <button
