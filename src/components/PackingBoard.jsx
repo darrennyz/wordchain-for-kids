@@ -277,11 +277,14 @@ export default function PackingBoard({
     e.preventDefault();
     // Capture pointer so we keep receiving events even when finger moves off the element
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+    // Preserve the current orientation when re-dragging the already-selected piece;
+    // reset to 0 only when picking up a different piece.
+    const oIdx = selectedPieceId === id ? orientationIdx : 0;
     setSelectedPieceId(id);
-    setOrientationIdx(0);
+    setOrientationIdx(oIdx);
     const cell = getCellFromClient(e.clientX, e.clientY);
     setHoveredCell(cell);
-    setDragging({ pieceId: id, orientationIdx: 0, clientX: e.clientX, clientY: e.clientY });
+    setDragging({ pieceId: id, orientationIdx: oIdx, clientX: e.clientX, clientY: e.clientY });
   }
 
   function handlePiecePointerMove(e, id) {
@@ -289,17 +292,20 @@ export default function PackingBoard({
     e.preventDefault();
     const cell = getCellFromClient(e.clientX, e.clientY);
     setHoveredCell(cell);
-    setDragging((d) => d ? { ...d, clientX: e.clientX, clientY: e.clientY } : null);
+    // Keep dragging.orientationIdx in sync with the latest orientationIdx state
+    // so the ghost reflects any rotation applied before/during the drag
+    setDragging((d) => d ? { ...d, clientX: e.clientX, clientY: e.clientY, orientationIdx: stateRef.current.orientationIdx } : null);
   }
 
   function handlePiecePointerUp(e, id) {
     if (!dragging || dragging.pieceId !== id) return;
     e.preventDefault();
     const cell = getCellFromClient(e.clientX, e.clientY);
+    // Capture orientation from dragging before clearing it
+    const oIdx = dragging.orientationIdx;
     setDragging(null);
     if (cell) {
-      const s = stateRef.current;
-      attemptPlace(cell[0], cell[1], id, s.orientationIdx, s.boardState, timer);
+      attemptPlace(cell[0], cell[1], id, oIdx, stateRef.current.boardState, timer);
     }
   }
 

@@ -54,7 +54,7 @@ export default function WeeklyLeaderboard({ onBack }) {
       </div>
 
       <p className="text-snow-400 text-xs mb-4 text-center">
-        Combined WordChain + Sudoku &middot; Ranked by avg time &middot; Resets Monday
+        All 3 games &middot; More games played = higher rank &middot; Speed is the tiebreaker &middot; Resets Monday
       </p>
 
       {/* Content */}

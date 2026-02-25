@@ -542,8 +542,13 @@ export async function getWeeklyLeaderboard() {
     .map((p) => ({
       ...p,
       avgTime: Math.round(p.totalTime / p.gamesPlayed),
+      // Hidden score: each completed game = +1000 pts; each second of total play = -1 pt.
+      // This means playing more games always outweighs being slightly slower,
+      // while speed is the tiebreaker between players with the same game count.
+      // Example: 3 games @ 45 s avg → 3000 - 135 = 2865 pts beats 1 game @ 20 s → 1000 - 20 = 980 pts.
+      score: p.gamesPlayed * 1000 - p.totalTime,
     }))
-    .sort((a, b) => a.avgTime - b.avgTime);
+    .sort((a, b) => b.score - a.score); // higher score = better rank
 
   return { leaderboard, weekLabel };
 }
